@@ -1,0 +1,19 @@
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+android_app {
+    name: "roverController",
+    resource_dirs: [
+        "res",
+    ],
+    static_libs: [
+        "androidx.appcompat_appcompat",
+    ],
+    srcs: ["src/**/*.java"],
+    platform_apis: true,
+    certificate: "platform",
+    optimize: {
+        proguard_flags_files: ["proguard.flags"],
+    },
+}
