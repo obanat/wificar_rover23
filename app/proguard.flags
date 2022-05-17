@@ -1,0 +1,4 @@
+# Keeps methods that are invoked by JNI.
+-keepclassmembers class * {
+  @com.obana.rover.annotations.UsedByNative *;
+}
