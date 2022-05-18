@@ -4,21 +4,21 @@ package com.obana.rover.utils;
 public class BlowFish
 {
     class Ctx {
-		int[][] S;
-		int[] P  = new int[18];
-		
-		public int F1(int i) {
-			short word0 = (short)i;
-			int j = i >> 8;
-			i = (short)j;
-			int k = j >> 8;
-			j = (short)k;
-			k >>= 8;
-			return (S[0][k & 0xff] + S[1][j & 0xff] ^ S[2][i & 0xff]) + S[3][word0 & 0xff];
-		}
-		
-		public void init () {
-			S[0] = new int[] {
+        int[][] S;
+        int[] P  = new int[18];
+
+        public int F1(int i) {
+            short word0 = (short)i;
+            int j = i >> 8;
+            i = (short)j;
+            int k = j >> 8;
+            j = (short)k;
+            k >>= 8;
+            return (S[0][k & 0xff] + S[1][j & 0xff] ^ S[2][i & 0xff]) + S[3][word0 & 0xff];
+        }
+
+        public void init () {
+            S[0] = new int[] {
                 0xd1310ba6, 0x98dfb5ac, 0x2ffd72db, 0xd01adfb7, 0xb8e1afed, 0x6a267e96, 0xba7c9045, 0xf12c7f99, 0x24a19947, 0xb3916cf7, 
                 0x801f2e2, 0x858efc16, 0x636920d8, 0x71574e69, 0xa458fea3, 0xf4933d7e, 0xd95748f, 0x728eb658, 0x718bcd58, 0x82154aee, 
                 0x7b54a41d, 0xc25a59b5, 0x9c30d539, 0x2af26013, 0xc5d1b023, 0x286085f0, 0xca417918, 0xb8db38ef, 0x8e79dcb0, 0x603a180e, 
@@ -46,7 +46,7 @@ public class BlowFish
                 0xd60f573f, 0xbc9bc6e4, 0x2b60a476, 0x81e67400, 0x8ba6fb5, 0x571be91f, 0xf296ec6b, 0x2a0dd915, 0xb6636521, 0xe7b9f9b6, 
                 0xff340528, 0xc5855664, 0x53b02d5d, 0xa99f8fa1, 0x8ba4799, 0x6e85076a
             };
-			S[1] = new int[] {
+            S[1] = new int[] {
                 0x4b7a70e9, 0xb5b32944, 0xdb75092e, 0xc4192623, 0xad6ea6b0, 0x49a7df7d, 0x9cee60b8, 0x8fedb266, 0xecaa8c71, 0x699a17ff, 
                 0x5664526c, 0xc2b19ee1, 0x193602a5, 0x75094c29, 0xa0591340, 0xe4183a3e, 0x3f54989a, 0x5b429d65, 0x6b8fe4d6, 0x99f73fd6, 
                 0xa1d29c07, 0xefe830f5, 0x4d2d38e6, 0xf0255dc1, 0x4cdd2086, 0x8470eb26, 0x6382e9c6, 0x21ecc5e, 0x9686b3f, 0x3ebaefc9, 
@@ -130,104 +130,104 @@ public class BlowFish
                 0x85cbfe4e, 0x8ae88dd8, 0x7aaaf9b0, 0x4cf9aa7e, 0x1948c25c, 0x2fb8a8c, 0x1c36ae4, 0xd6ebe1f9, 0x90d4f869, 0xa65cdea0, 
                 0x3f09252d, 0xc208e69f, 0xb74e6132, 0xce77e25b, 0x578fdfe3, 0x3ac372e6
             };
-		}
-	}
+        }
+    }
 
-	private Ctx ctx;
-	private int ROUNDCOUNT;
-	private int[] ORIG_P = new int[] {//not use
+    private Ctx ctx;
+    private int ROUNDCOUNT;
+    private int[] ORIG_P = new int[] {//not use
             0x243F6A88, 0x85A308D3, 0x13198A2E, 0x03707344,
             0xA4093822, 0x299F31D0, 0x082EFA98, 0xEC4E6C89,
             0x452821E6, 0x38D01377, 0xBE5466CF, 0x34E90C6C,
             0xC0AC29B7, 0xC97C50DD, 0x3F84D5B5, 0xB5470917,
             0x9216D5D9, 0x8979FB1B};
-    
-	public BlowFish() {
+
+    public BlowFish() {
         ROUNDCOUNT = 16;
-		ctx = new Ctx();
-		ORIG_P = new int[] {0,0,0,0,
-							0,0,0,0,
-							0,0,0,0,
-							0,0,0,0,
-							0,0};// rover2.0 use 0 as key_org
+        ctx = new Ctx();
+        ORIG_P = new int[] {0,0,0,0,
+                            0,0,0,0,
+                            0,0,0,0,
+                            0,0,0,0,
+                            0,0};// rover2.0 use 0 as key_org
     }
 
     /*public int[] Blowfish_decipher(int a[], int b[])
     {
         int[] tmp = new int[] {a[0], b[0]};
-		decrypt(tmp);
+        decrypt(tmp);
         return new int[] {tmp[0], tmp[1]};
     }
 
     public int[] Blowfish_encipher(int a[], int b[])
-    {	
-		int[] tmp = new int[] {a[0], b[0]};
-		encrypt(tmp);
+    {    
+        int[] tmp = new int[] {a[0], b[0]};
+        encrypt(tmp);
         return new int[] {tmp[0], tmp[1]};
     }*/
 
     public void InitBlowfish(byte key[], int length)
     {
         int i,j;
-		
-		ctx.init();
-		j = 0;
+
+        ctx.init();
+        j = 0;
         for(i=0;i < 18;i++) {
             int data = 0x00000000;
-			int k;
+            int k;
             for(k=0; i< 4; k++) {
                 data = (data << 8) | (int)key[j];
                 j = (j + 1) % key.length;
-			}
+            }
             ctx.P[i] =  ORIG_P[i] ^ data;
         }
-		
-		int[] L = new int[] {0};
-		int[] R = new int[] {0};
+        
+        int[] L = new int[] {0};
+        int[] R = new int[] {0};
         for(i = 0; i < 18 ; i += 2) {
             int[] tmp = Blowfish_encipher(L, R);
             ctx.P[i] = tmp[0];
             ctx.P[i+1] = tmp[1];
-		}
-		
-		for(i = 0; i< 4; i++) {
-			int k;
+        }
+
+        for(i = 0; i< 4; i++) {
+            int k;
             for(k = 0; k < 256; k +=2) {
                 int[] tmp = Blowfish_encipher(L, R);
                 ctx.S[i][k] = tmp[0];
                 ctx.S[i][k + 1] = tmp[1];
-			}
-		}
+            }
+        }
     }
 
-	public void encrypt(int[] array2) {
+    public void encrypt(int[] array2) {
         //Accepts a pair of numbers and returns them in encrypted form.
-		int i;
+        int i;
         for(i = 0; i< 16; i += 2){
            array2[0] ^= ctx.P[i];
            //array2[1] ^= ctx.ff(array2[0]);
            array2[1] ^= ctx.P[i+1];
            //array2[0] ^= ctx.ff(array2[1]);
-		}
+        }
         array2[0] ^= ctx.P[16];
         array2[1] ^= ctx.P[17];
     }
-	
+
     public void decrypt(int[] array2) {
         //Accepts an encrypted pair of numbers and returns them in unencrypted 
         //  form.
-		int i;
+        int i;
         for(i = 16; i > 0; i -= 2){
            array2[0] ^= ctx.P[i+1];
            //array2[1] ^= ctx.ff(array2[0]);
            array2[1] ^= ctx.P[i];
            //array2[0] ^= ctx.ff(array2[1]);
-		}
+        }
         array2[0] ^= ctx.P[1];
         array2[1] ^= ctx.P[0];
     }
-	
-	public int[] Blowfish_encipher(int a[], int b[]){
+
+    public int[] Blowfish_encipher(int a[], int b[]){
         int k = a[0];
         int j = b[0];
         int i = 0;
@@ -245,8 +245,8 @@ public class BlowFish
             i++;
         } while(true);
     }
-	
-	public int[] Blowfish_decipher(int a[], int b[]) {
+
+    public int[] Blowfish_decipher(int a[], int b[]) {
         int k = a[0];
         int j = b[0];
         int i = ROUNDCOUNT + 1;
