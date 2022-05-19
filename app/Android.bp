@@ -11,8 +11,7 @@ android_app {
         "androidx.appcompat_appcompat",
     ],
     srcs: ["src/**/*.java"],
-    platform_apis: true,
-    certificate: "platform",
+    sdk_version: "28",
     optimize: {
         proguard_flags_files: ["proguard.flags"],
     },
