@@ -39,9 +39,15 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ToggleButton;
 
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+
 import java.util.Timer;
 import java.util.TimerTask;
-
+import com.obana.rover.utils.*;
 public class WificarMain extends Activity implements View.OnClickListener, View.OnTouchListener, Chronometer.OnChronometerTickListener {
   private static final int DOUBLE_PRESS_INTERVAL = 2000;
   
@@ -119,16 +125,29 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
   public static final int MESSAGE_STOP_PLAYPATH = 2002;
   
   public static final int MESSAGE_TALK_PRESS = 5007;
+  public static final int MESSAGE_MAKE_TOAST = 6001;
+  public static final boolean SHOW_DEBUG_MESSAGE = true;
+  public static final String BUNDLE_KEY_TOAST_MSG = "Tmessage";
   
-  public static final String TAG = "WificarMain";
+  public static final String TAG = "Wificar_Activity";
   
   public RelativeLayout Parent;
-	public WificarLayoutParams wificarLayoutParams;
-	
+  public WificarLayoutParams wificarLayoutParams;
+  public Timer ConnnectOut_timer = null;
+  private WifiCar wifiCar = null;
+  private Handler handler = null;
   protected void onCreate(Bundle paramBundle) {
     super.onCreate(paramBundle);
 
-	this.wificarLayoutParams = WificarLayoutParams.getWificarLayoutParams(this);
+    this.wifiCar = new WifiCar(this);
+    this.handler = new Handler() {
+      public void handleMessage(Message param1Message) {
+        if (!handleMessageinUI(param1Message)) {
+            super.handleMessage(param1Message);
+        }    
+      }
+    };
+    this.wificarLayoutParams = WificarLayoutParams.getWificarLayoutParams(this);
     setHLayoutparams();
   }
   
@@ -156,9 +175,37 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
   }
   
   protected void onResume() {
-
     super.onResume();
+    AppLog.i(TAG, "on Resume");
+    Runnable runnable = new Runnable() {
+        public void run() {
+          AppLog.d(TAG, "--->socket connecting .....");
 
+          WifiInfo wifiInfo = ((WifiManager)WificarMain.this.getSystemService("wifi")).getConnectionInfo();
+          String ssid1 = wifiInfo.getSSID().toString();
+          int addr = wifiInfo.getIpAddress();
+          AppLog.d(TAG, "---->wifi connected, ssid1:" + ssid1);
+
+          ConnectivityManager cm = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+          NetworkInfo networkInfo = cm.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+          String ssid2 = networkInfo.getExtraInfo();
+          AppLog.d(TAG, "---->wifi connected, ssid2:" + ssid2 + " ip:" + int2ip(addr));
+          
+          if ((ssid1 != null && ssid1.contains("Rover")) || (ssid2 != null && ssid2.contains("Rover"))) {
+            WificarMain.this.ConnnectOut_timer = new Timer();
+            WificarMain.this.ConnnectOut_timer.schedule(new WificarMain.ConnectOut(), 6000L);
+            boolean rest = WificarMain.this.wifiCar.setConnect();
+            AppLog.d(TAG, "--->connecting result:" + rest);
+            //WificarMain.this.wifiCar.updatedChange();
+             sendToastMessage("socket connect succuess!");
+
+            return;
+          }
+          sendToastMessage("wifi not match, just exit!");
+        }
+      };
+      if (this.wifiCar.isSocketConnected() == 0)
+        (new Thread(runnable)).start(); 
   }
   
   protected void onStop() {
@@ -175,4 +222,55 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
   
   public void onChronometerTick(Chronometer paramChronometer) {
   }
+
+
+  class ConnectOut extends TimerTask {
+    public void run() {
+      WificarMain.this.ConnnectOut_timer.cancel();
+      WificarMain.this.ConnnectOut_timer = null;
+
+      Message message = new Message();
+      message.what = MESSAGE_CONNECT_TO_CAR_FAIL;
+      WificarMain.this.handler.sendMessage(message);
+      AppLog.i(TAG, "connect_status --->connect out!");
+    }
+  }
+
+  private String int2ip(int ipInt) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(ipInt & 0xFF).append(".");
+        sb.append((ipInt >> 8) & 0xFF).append(".");
+        sb.append((ipInt >> 16) & 0xFF).append(".");
+        sb.append((ipInt >> 24) & 0xFF);
+        return sb.toString();
+  }
+ public boolean handleMessageinUI(Message param1Message) {
+    boolean handled = false;
+    switch (param1Message.what) {
+      case MESSAGE_CONNECT_TO_CAR_FAIL:
+        if(SHOW_DEBUG_MESSAGE)
+            Toast.makeText(WificarMain.this, "failed to connect!", 0).show();
+        handled = true;
+        break;
+      case MESSAGE_MAKE_TOAST:
+        if(SHOW_DEBUG_MESSAGE) {
+            String msg = param1Message.getData().getString(BUNDLE_KEY_TOAST_MSG);
+            Toast.makeText(WificarMain.this, msg, 0).show();
+        }
+        handled = true;
+        break;
+      default:
+        return false;
+    }
+    return handled;
+ }
+
+ public void sendToastMessage(String str) {
+     Bundle bundle = new Bundle();
+     bundle.putString(BUNDLE_KEY_TOAST_MSG, str);
+
+     Message msg = handler.obtainMessage(MESSAGE_MAKE_TOAST);
+     msg.setData(bundle);
+     handler.sendMessage(msg);
+ }
 }
