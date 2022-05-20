@@ -137,6 +137,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
   public Timer ConnnectOut_timer = null;
   private WifiCar wifiCar = null;
   private Handler handler = null;
+  private int LMoving = 0;
   protected void onCreate(Bundle paramBundle) {
     super.onCreate(paramBundle);
 
@@ -217,13 +218,28 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
   protected void onStop() {
     super.onStop();
   }
-  
+
+  protected void onDestroy() {
+    super.onDestroy();
+    AppLog.d(TAG, "on destory");
+
+    this.handler.removeCallbacks(this.LMovingTask2s);
+
+  }
   public void onClick(View paramView) {
-	  return;
+      return;
   }
   
   public boolean onTouch(View paramView, MotionEvent paramMotionEvent) {
-	  return true;
+    AppLog.d(TAG, "on onTouch");
+    if (WificarMain.this.LMoving > 0) {
+        AppLog.d(TAG, "on onTouch, already moving ,return");
+        sendToastMessage("already moving!");
+        return true;
+    }
+    WificarMain.this.LMoving = 0;
+    WificarMain.this.handler.postDelayed(LMovingTask2s, 100L);
+    return true;
   }
   
   public void onChronometerTick(Chronometer paramChronometer) {
@@ -279,4 +295,23 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
      msg.setData(bundle);
      handler.sendMessage(msg);
  }
+
+ private Runnable LMovingTask2s = new Runnable() {
+    public void run() {
+        AppLog.e(WificarMain.this.TAG, "run move in 100ms");
+        try {
+          WificarMain.this.wifiCar.move(0, 10);
+        } catch (IOException iOException) {
+          iOException.printStackTrace();
+        } 
+
+        if (WificarMain.this.LMoving < 20) {
+            WificarMain.this.handler.postDelayed(this, 100L);
+            WificarMain.this.LMoving++;
+        } else {
+            WificarMain.this.LMoving = 0;
+            WificarMain.this.handler.removeCallbacks(this);
+        }
+    }
+  };
 }
