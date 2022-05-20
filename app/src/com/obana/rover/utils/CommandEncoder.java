@@ -288,24 +288,17 @@ public class CommandEncoder
     {
         AppLog.d(TAG, "cmdVerifyReq");
         BlowFish blowfish = new BlowFish();
-        int ai[] = new int[1];
-        ai[0] = i;
-        int ai1[] = new int[1];
-        ai1[0] = j;
-        int ai2[] = new int[1];
-        ai2[0] = k;
-        int ai3[] = new int[1];
-        ai3[0] = l;
+
         blowfish.InitBlowfish(s.getBytes(), s.length());
-        blowfish.Blowfish_encipher(ai, ai1);
-        blowfish.Blowfish_encipher(ai2, ai3);
+        blowfish.Blowfish_encipher(i, j);
+        blowfish.Blowfish_encipher(k, l);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        out.write(int32ToByteArray(ai[0]));
-        out.write(int32ToByteArray(ai1[0]));
-        out.write(int32ToByteArray(ai2[0]));
-        out.write(int32ToByteArray(ai3[0]));
+        out.write(int32ToByteArray(i));
+        out.write(int32ToByteArray(j));
+        out.write(int32ToByteArray(k));
+        out.write(int32ToByteArray(l));
         Protocol ret = new Protocol("MO_O".getBytes(), 2, out.size(), out.toByteArray());
-        AppLog.d(TAG, "============================verify");
+        AppLog.d(TAG, "========> start send verify req");
         return ret.output();
     }
 
@@ -495,16 +488,12 @@ public class CommandEncoder
         if(abyte0.length <= 23) return bytearraybuffer;
 
         int i;
-        ByteUtility.byteArrayToInt(abyte0, 4, 2);
-        i = ByteUtility.byteArrayToInt(abyte0, 15, 4);
-        AppLog.d(TAG, "--->receive data i=" + i + " byte len=" + abyte0.length);
+        int op = ByteUtility.byteArrayToInt(abyte0, 4, 2);
+        int len = ByteUtility.byteArrayToInt(abyte0, 15, 4);
+        AppLog.d(TAG, "--->receive [" + abyte0.length + "] bytes data op:" + op + " len:" + len);
         //if(abyte0.length >= i + 23) return bytearraybuffer;
 
-        i += 23;
         Protocol protocol = new Protocol(abyte0, 0);
-        bytearraybuffer.reset();
-        bytearraybuffer.write(abyte0, i, abyte0.length - i);
-        AppLog.d(TAG, "--->receive data op=" + protocol.getOp());
         switch(protocol.getOp())
         {
         default:
@@ -557,27 +546,16 @@ public class CommandEncoder
 
         //if(byteArrayToInt(abyte0, 0, 2) != 0) return false;
 
-        String s;
-        int obj[];
-        s = byteArrayToString(abyte0, 2, 13);
-        obj = new int[4];
-        i = 0;
-
-        AppLog.d(TAG, "--->camera id:" + s);
-
-
-        int[] L1 = new int[1];
-        int[] R1 = new int[1];
-        int[] L2 = new int[1];
-        int[] R2 = new int[1];
+        String cameraId = byteArrayToString(abyte0, 2, 13);
+        AppLog.d(TAG, "--->camera id:" + cameraId);
 
         //wificar.setDeviceId((new StringBuilder(String.valueOf(obj[0]))).append(".").append(obj[1]).append(".").append(obj[2]).append(".").append(obj[3]).toString());
-        wificar.setCameraId(s);
+        wificar.setCameraId(cameraId);
 
-        L1[0] = byteArrayToInt(abyte0, 43, 4);
-        R1[0] = byteArrayToInt(abyte0, 47, 4);
-        L2[0] = byteArrayToInt(abyte0, 51, 4);
-        R2[0] = byteArrayToInt(abyte0, 55, 4);
+        int L1 = byteArrayToInt(abyte0, 43, 4);
+        int R1 = byteArrayToInt(abyte0, 47, 4);
+        int L2 = byteArrayToInt(abyte0, 51, 4);
+        int R2 = byteArrayToInt(abyte0, 55, 4);
         //wificar.setChallengeReverse(0, i1);
         //wificar.setChallengeReverse(1, j1);
         //wificar.setChallengeReverse(2, k1);
@@ -585,15 +563,15 @@ public class CommandEncoder
         BlowFish bf = new BlowFish();
         AppLog.d(TAG, "--->BlowFish init start");
         bf.InitBlowfish(wificar.getKey().getBytes(), wificar.getKey().length());
-        AppLog.d(TAG, "--->BlowFish init end");
+        AppLog.d(TAG, "--->BlowFish init end; key:" + wificar.getKey());
         int[] ret = bf.Blowfish_encipher(L1, R1);
-        L1[0] = ret[0]; R1[0] = ret[1];
+        L1 = ret[0]; R1 = ret[1];
         ret = bf.Blowfish_encipher(L2, R2);
-        L2[0] = ret[0]; R2[0] = ret[1];
+        L2 = ret[0]; R2 = ret[1];
         /*if(!sss1.equals(s3) || !s1.equals(s4) || !((String) (sss2)).equals(s5) || !s2.equals(s6))
             return false; /* Loop/switch isn't completed */
         AppLog.d(TAG, "--->======ready to send verifyCommand");
-        wificar.verifyCommand(L1[0],R1[0],L2[0],R2[0]);
+        wificar.verifyCommand(L1,R1,L2,R2);
         return true;
 
     }
