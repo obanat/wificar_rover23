@@ -566,56 +566,34 @@ public class CommandEncoder
 
         if(i < 4) return false;
 
-        int j;
-        int k;
-        int l;
-        int i1;
-        int j1;
-        int k1;
-        int l1;
-        int ai2[];
+
+        int[] L1 = new int[1];
+        int[] R1 = new int[1];
+        int[] L2 = new int[1];
+        int[] R2 = new int[1];
+
         //wificar.setDeviceId((new StringBuilder(String.valueOf(obj[0]))).append(".").append(obj[1]).append(".").append(obj[2]).append(".").append(obj[3]).toString());
-        //wificar.setCameraId(s);
-        i = byteArrayToInt(abyte0, 27);
-        j = byteArrayToInt(abyte0, 31);
-        k = byteArrayToInt(abyte0, 35);
-        l = byteArrayToInt(abyte0, 39);
-        i1 = byteArrayToInt(abyte0, 43, 4);
-        j1 = byteArrayToInt(abyte0, 47, 4);
-        k1 = byteArrayToInt(abyte0, 51, 4);
-        l1 = byteArrayToInt(abyte0, 55, 4);
+        wificar.setCameraId(s);
+
+        L1[0] = byteArrayToInt(abyte0, 43, 4);
+        R1[0] = byteArrayToInt(abyte0, 47, 4);
+        L2[0] = byteArrayToInt(abyte0, 51, 4);
+        R2[0] = byteArrayToInt(abyte0, 55, 4);
         //wificar.setChallengeReverse(0, i1);
         //wificar.setChallengeReverse(1, j1);
         //wificar.setChallengeReverse(2, k1);
         //wificar.setChallengeReverse(3, l1);
         BlowFish bf = new BlowFish();
         bf.InitBlowfish(wificar.getKey().getBytes(), wificar.getKey().length());
-        i1 = 0;
-        j1 = 0;
-        k1 = 0;
-        l1 = 0;
-        ai2 = new int[1];
-        ai2[0] = i1;
-        int ai[] = new int[1];
-        ai[0] = j1;
-        obj = new int[1];
-        obj[0] = k1;
-        int ai1[] = new int[1];
-        ai1[0] = l1;
-        bf.Blowfish_encipher(ai2, ai);
-        bf.Blowfish_encipher(((int []) (obj)), ai1);
-        String sss1 = int32ToByteHexR(ai2[0]);
-        String s1 = int32ToByteHexR(ai[0]);
-        String sss2 = int32ToByteHexR(obj[0]);
-        String s2 = int32ToByteHexR(ai1[0]);
-        String s3 = int32ToByteHex(i);
-        String s4 = int32ToByteHex(j);
-        String s5 = int32ToByteHex(k);
-        String s6 = int32ToByteHex(l);
-        /*if(!sss1.equals(s3) || !s1.equals(s4) || !((String) (sss2)).equals(s5) || !s2.equals(s6))
-            return false; /* Loop/switch isn't completed */
+
+
+        int[] ret = bf.Blowfish_encipher(L1, R1);
+        L1[0] = ret[0]; R1[0] = ret[1];
+        ret = bf.Blowfish_encipher(L2, R2);
+        L2[0] = ret[0]; R2[0] = ret[1];
+
         AppLog.d(TAG, "--->===============================");
-        wificar.verifyCommand();
+        wificar.verifyCommand(L1[0],R1[0],L2[0],R2[0]);
         return true;
 
     }
