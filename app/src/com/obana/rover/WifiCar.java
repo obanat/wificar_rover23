@@ -282,14 +282,25 @@ public class WifiCar
     }
 
     public int isSocketConnected() {
-    try {
-      if (cmdSocket == null)
-        return 0; 
-      boolean bool = cmdSocket.isConnected();
-        return 1;
-    } catch (Exception exception) {
-      exception.printStackTrace();
-    } 
-    return 0;
-  }
+        try {
+          if (cmdSocket == null)
+            return 0; 
+          boolean bool = cmdSocket.isConnected();
+            return 1;
+        } catch (Exception exception) {
+          exception.printStackTrace();
+        } 
+        return 0;
+    }
+
+    public boolean move(int i, int j) throws IOException {
+        byte abyte0[];
+
+        abyte0 = CommandEncoder.cmdDeviceControlReq(4, j);
+        AppLog.d(TAG, (new StringBuilder("cmdDeviceControlReq(4):")).append(j).toString());
+
+        dataOutputStream.write(abyte0);
+        dataOutputStream.flush();
+        return true;
+    }
 }
