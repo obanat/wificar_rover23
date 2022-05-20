@@ -180,7 +180,7 @@ public class WifiCar
 
             public void run()//this is main receive loop
             {
-                ByteArrayOutputStream bytearraybuffer = new ByteArrayOutputStream(0x100000);
+                ByteArrayOutputStream bytearraybuffer = new ByteArrayOutputStream(1024);
                 AppLog.i(TAG, "--->ready to read remote socket:");
 
                 int i;
@@ -200,8 +200,9 @@ public class WifiCar
                     AppLog.i(TAG, "--->read dataInputStream, len:" + i + " ready to parseCommand");
                     byte abyte1[] = new byte[i];
                     try {
+                        bytearraybuffer.reset();
                         bytearraybuffer.write(abyte1, 0, dataInputStream.read(abyte1, 0, i));
-                        bytearraybuffer = CommandEncoder.parseCommand(instance, bytearraybuffer);
+                        CommandEncoder.parseCommand(instance, bytearraybuffer);
                     } catch(IOException ioexception) {
                         ioexception.printStackTrace();
                         AppLog.i(TAG, "main parseCommand io exception!, just throw it!");
