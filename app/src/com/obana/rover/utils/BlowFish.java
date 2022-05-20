@@ -18,6 +18,7 @@ public class BlowFish
         }
 
         public void init () {
+            S = new int[4][];
             S[0] = new int[] {
                 0xd1310ba6, 0x98dfb5ac, 0x2ffd72db, 0xd01adfb7, 0xb8e1afed, 0x6a267e96, 0xba7c9045, 0xf12c7f99, 0x24a19947, 0xb3916cf7, 
                 0x801f2e2, 0x858efc16, 0x636920d8, 0x71574e69, 0xa458fea3, 0xf4933d7e, 0xd95748f, 0x728eb658, 0x718bcd58, 0x82154aee, 
@@ -172,10 +173,10 @@ public class BlowFish
 
         ctx.init();
         j = 0;
-        for(i=0;i < 18;i++) {
+        for(i=0;i < 18; i++) {
             int data = 0x00000000;
             int k;
-            for(k=0; i< 4; k++) {
+            for(k=0; k< 4; k++) {
                 data = (data << 8) | (int)key[j];
                 j = (j + 1) % key.length;
             }
