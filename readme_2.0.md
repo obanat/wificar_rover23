@@ -89,6 +89,15 @@ def setTreads(self, left, right):-1~1，左的index=4，右=1
         self._sendDeviceControlRequest(wheeldir, speed) //实际的接口
         self._sendCommandByteRequest(250, [a,b])
 
+关于move,java(2.0) WifiCar.jad分析
+3，0  左停， 对应move函数的入参0，0//python代码是4，0，不是3，待实测
+4，10 左前， 对应move函数的入参0，10
+5，10 左后， 对应move函数的入参0，-10
+
+0，0  右停， 对应move函数的入参1，0
+1，10 右前， 对应move函数的入参1，10
+2，10 右后， 对应move函数的入参1，-10
+
 
 设置相机角度：
 python：
