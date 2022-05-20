@@ -157,7 +157,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
   {
         this.Parent = new RelativeLayout(getApplicationContext());
         setContentView(this.Parent, wificarLayoutParams.parentParams);
-
+        this.Parent.setOnTouchListener(this);
         //refreshUIListener();
   }
 
@@ -232,13 +232,15 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
   
   public boolean onTouch(View paramView, MotionEvent paramMotionEvent) {
     AppLog.d(TAG, "on onTouch");
+    //super.onTouch(paramView, paramMotionEvent);
     if (WificarMain.this.LMoving > 0) {
         AppLog.d(TAG, "on onTouch, already moving ,return");
         sendToastMessage("already moving!");
         return true;
     }
     WificarMain.this.LMoving = 0;
-    WificarMain.this.handler.postDelayed(LMovingTask2s, 100L);
+     (new Thread(LMovingTask2s)).start();
+    //WificarMain.this.handler.postDelayed(LMovingTask2s, 100L);
     return true;
   }
   
@@ -296,22 +298,31 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
      handler.sendMessage(msg);
  }
 
- private Runnable LMovingTask2s = new Runnable() {
+ private Thread LMovingTask2s = new Thread() {
     public void run() {
-        AppLog.e(WificarMain.this.TAG, "run move in 100ms");
-        try {
-          WificarMain.this.wifiCar.move(0, 10);
-        } catch (IOException iOException) {
-          iOException.printStackTrace();
-        } 
+        do {
+            AppLog.i(TAG, "run move in 100ms");
+            try {
+              WificarMain.this.wifiCar.move(0, 10);
+            } catch (IOException iOException) {
+              iOException.printStackTrace();
+            } 
 
-        if (WificarMain.this.LMoving < 20) {
-            WificarMain.this.handler.postDelayed(this, 100L);
-            WificarMain.this.LMoving++;
-        } else {
-            WificarMain.this.LMoving = 0;
-            WificarMain.this.handler.removeCallbacks(this);
-        }
+            if (WificarMain.this.LMoving < 30) {
+                //WificarMain.this.handler.postDelayed(this, 100L);
+                try {
+                    Thread.sleep(500);
+                } catch (Exception e) {
+                    AppLog.e(TAG, "sleep Exception");
+                }
+                WificarMain.this.LMoving += 1;
+                AppLog.i(TAG, "run move in 100ms,LMoving:" + WificarMain.this.LMoving);
+            } else {
+                WificarMain.this.LMoving = 0;
+                //WificarMain.this.handler.removeCallbacks(this);
+                return;
+            }
+        } while (true);
     }
   };
 }
