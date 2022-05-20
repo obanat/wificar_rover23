@@ -5,7 +5,11 @@ public class BlowFish
 {
     class Ctx {
         int[][] S;
-        int[] P  = new int[18];
+        int[] P  = new int[] {0,0,0,0,
+                            0,0,0,0,
+                            0,0,0,0,
+                            0,0,0,0,
+                            0,0};// rover2.0 use 0 as key_org
 
         public int F1(int i) {
             short word0 = (short)i;
@@ -18,8 +22,7 @@ public class BlowFish
         }
 
         public void init () {
-            S = new int[4][];
-            S[0] = new int[] {
+             S = new int[][]{ {
                 0xd1310ba6, 0x98dfb5ac, 0x2ffd72db, 0xd01adfb7, 0xb8e1afed, 0x6a267e96, 0xba7c9045, 0xf12c7f99, 0x24a19947, 0xb3916cf7, 
                 0x801f2e2, 0x858efc16, 0x636920d8, 0x71574e69, 0xa458fea3, 0xf4933d7e, 0xd95748f, 0x728eb658, 0x718bcd58, 0x82154aee, 
                 0x7b54a41d, 0xc25a59b5, 0x9c30d539, 0x2af26013, 0xc5d1b023, 0x286085f0, 0xca417918, 0xb8db38ef, 0x8e79dcb0, 0x603a180e, 
@@ -45,9 +48,8 @@ public class BlowFish
                 0x250e2d, 0x2071b35e, 0x226800bb, 0x57b8e0af, 0x2464369b, 0xf009b91e, 0x5563911d, 0x56dfa6aa, 0x78c14389, 0xd95a537f, 
                 0x207d5ba2, 0x2e5b9c5, 0x83260376, 0x6295cfa9, 0x11c81968, 0x4e734a41, 0xb3472dca, 0x7b14a94a, 0x1b510052, 0x9a532915, 
                 0xd60f573f, 0xbc9bc6e4, 0x2b60a476, 0x81e67400, 0x8ba6fb5, 0x571be91f, 0xf296ec6b, 0x2a0dd915, 0xb6636521, 0xe7b9f9b6, 
-                0xff340528, 0xc5855664, 0x53b02d5d, 0xa99f8fa1, 0x8ba4799, 0x6e85076a
-            };
-            S[1] = new int[] {
+                0xff340528, 0xc5855664, 0x53b02d5d, 0xa99f8fa1, 0x8ba4799, 0x6e85076a},
+            {
                 0x4b7a70e9, 0xb5b32944, 0xdb75092e, 0xc4192623, 0xad6ea6b0, 0x49a7df7d, 0x9cee60b8, 0x8fedb266, 0xecaa8c71, 0x699a17ff, 
                 0x5664526c, 0xc2b19ee1, 0x193602a5, 0x75094c29, 0xa0591340, 0xe4183a3e, 0x3f54989a, 0x5b429d65, 0x6b8fe4d6, 0x99f73fd6, 
                 0xa1d29c07, 0xefe830f5, 0x4d2d38e6, 0xf0255dc1, 0x4cdd2086, 0x8470eb26, 0x6382e9c6, 0x21ecc5e, 0x9686b3f, 0x3ebaefc9, 
@@ -73,9 +75,8 @@ public class BlowFish
                 0x58428d2a, 0xc55f5ea, 0x1dadf43e, 0x233f7061, 0x3372f092, 0x8d937e41, 0xd65fecf1, 0x6c223bdb, 0x7cde3759, 0xcbee7460, 
                 0x4085f2a7, 0xce77326e, 0xa6078084, 0x19f8509e, 0xe8efd855, 0x61d99735, 0xa969a7aa, 0xc50c06c2, 0x5a04abfc, 0x800bcadc, 
                 0x9e447a2e, 0xc3453484, 0xfdd56705, 0xe1e9ec9, 0xdb73dbd3, 0x105588cd, 0x675fda79, 0xe3674340, 0xc5c43465, 0x713e38d8, 
-                0x3d28f89e, 0xf16dff20, 0x153e21e7, 0x8fb03d4a, 0xe6e39f2b, 0xdb83adf7
-            };
-            S[2] = new int[] {
+                0x3d28f89e, 0xf16dff20, 0x153e21e7, 0x8fb03d4a, 0xe6e39f2b, 0xdb83adf7},
+             {
                 0xe93d5a68, 0x948140f7, 0xf64c261c, 0x94692934, 0x411520f7, 0x7602d4f7, 0xbcf46b2e, 0xd4a20068, 0xd4082471, 0x3320f46a, 
                 0x43b7d4b7, 0x500061af, 0x1e39f62e, 0x97244546, 0x14214f74, 0xbf8b8840, 0x4d95fc1d, 0x96b591af, 0x70f4ddd3, 0x66a02f45, 
                 0xbfbc09ec, 0x3bd9785, 0x7fac6dd0, 0x31cb8504, 0x96eb27b3, 0x55fa3941, 0xda2547e6, 0xabca0a9a, 0x28507825, 0x530429f4, 
@@ -101,9 +102,8 @@ public class BlowFish
                 0xf0177a28, 0xc0f586e0, 0x6058aa, 0x30dc7d62, 0x11e69ed7, 0x2338ea63, 0x53c2dd94, 0xc2c21634, 0xbbcbee56, 0x90bcb6de, 
                 0xebfc7da1, 0xce591d76, 0x6f05e409, 0x4b7c0188, 0x39720a3d, 0x7c927c24, 0x86e3725f, 0x724d9db9, 0x1ac15bb4, 0xd39eb8fc, 
                 0xed545578, 0x8fca5b5, 0xd83d7cd3, 0x4dad0fc4, 0x1e50ef5e, 0xb161e6f8, 0xa28514d9, 0x6c51133c, 0x6fd5c7e7, 0x56e14ec4, 
-                0x362abfce, 0xddc6c837, 0xd79a3234, 0x92638212, 0x670efa8e, 0x406000e0
-            };
-            S[3] = new int[] {
+                0x362abfce, 0xddc6c837, 0xd79a3234, 0x92638212, 0x670efa8e, 0x406000e0 },
+             {
                 0x3a39ce37, 0xd3faf5cf, 0xabc27737, 0x5ac52d1b, 0x5cb0679e, 0x4fa33742, 0xd3822740, 0x99bc9bbe, 0xd5118e9d, 0xbf0f7315, 
                 0xd62d1c7e, 0xc700c47b, 0xb78c1b6b, 0x21a19045, 0xb26eb1be, 0x6a366eb4, 0x5748ab2f, 0xbc946e79, 0xc6a376d2, 0x6549c2c8, 
                 0x530ff8ee, 0x468dde7d, 0xd5730a1d, 0x42d04dc6, 0x2939bbdb, 0xa9ba4650, 0xac9526e8, 0xbe5ee304, 0xa1fad5f0, 0x6a2d519a, 
@@ -129,22 +129,20 @@ public class BlowFish
                 0xe6c6c7bd, 0x327a140a, 0x45e1d006, 0xc3f27b9a, 0xc9aa53fd, 0x62a80f00, 0xbb25bfe2, 0x35bdd2f6, 0x71126905, 0xb2040222, 
                 0xb6cbcf7c, 0xcd769c2b, 0x53113ec0, 0x1640e3d3, 0x38abbd60, 0x2547adf0, 0xba38209c, 0xf746ce76, 0x77afa1c5, 0x20756060, 
                 0x85cbfe4e, 0x8ae88dd8, 0x7aaaf9b0, 0x4cf9aa7e, 0x1948c25c, 0x2fb8a8c, 0x1c36ae4, 0xd6ebe1f9, 0x90d4f869, 0xa65cdea0, 
-                0x3f09252d, 0xc208e69f, 0xb74e6132, 0xce77e25b, 0x578fdfe3, 0x3ac372e6
-            };
+                0x3f09252d, 0xc208e69f, 0xb74e6132, 0xce77e25b, 0x578fdfe3, 0x3ac372e6}};
         }
     }
 
     private Ctx ctx;
-    private int ROUNDCOUNT;
-    private int[] ORIG_P = new int[] {//not use
+    private static final int ROUNDCOUNT = 16;
+    private int[] ORIG_P = null; /*new int[] {//not use
             0x243F6A88, 0x85A308D3, 0x13198A2E, 0x03707344,
             0xA4093822, 0x299F31D0, 0x082EFA98, 0xEC4E6C89,
             0x452821E6, 0x38D01377, 0xBE5466CF, 0x34E90C6C,
             0xC0AC29B7, 0xC97C50DD, 0x3F84D5B5, 0xB5470917,
-            0x9216D5D9, 0x8979FB1B};
+            0x9216D5D9, 0x8979FB1B};*/
 
     public BlowFish() {
-        ROUNDCOUNT = 16;
         ctx = new Ctx();
         ORIG_P = new int[] {0,0,0,0,
                             0,0,0,0,
@@ -183,20 +181,20 @@ public class BlowFish
             ctx.P[i] =  ORIG_P[i] ^ data;
         }
         
-        int[] L = new int[] {0};
-        int[] R = new int[] {0};
+        int L = 0;
+        int R = 0;
         for(i = 0; i < 18 ; i += 2) {
             int[] tmp = Blowfish_encipher(L, R);
-            ctx.P[i] = tmp[0];
-            ctx.P[i+1] = tmp[1];
+            ctx.P[i] = tmp[0];L = tmp[0];
+            ctx.P[i+1] = tmp[1];R = tmp[1];
         }
 
         for(i = 0; i< 4; i++) {
             int k;
             for(k = 0; k < 256; k +=2) {
                 int[] tmp = Blowfish_encipher(L, R);
-                ctx.S[i][k] = tmp[0];
-                ctx.S[i][k + 1] = tmp[1];
+                ctx.S[i][k] = tmp[0];L = tmp[0];
+                ctx.S[i][k + 1] = tmp[1];R= tmp[1];
             }
         }
     }
@@ -228,11 +226,20 @@ public class BlowFish
         array2[1] ^= ctx.P[0];
     }
 
-    public int[] Blowfish_encipher(int a[], int b[]){
-        int k = a[0];
-        int j = b[0];
+    public int[] Blowfish_encipher(int L, int R){
+
         int i = 0;
-        do {
+        for (i =0; i <ROUNDCOUNT;i+=2 ) {
+            L ^= ctx.P[i];
+            R ^= ctx.F1(L);
+            R ^= ctx.P[i+1];
+            L ^= ctx.F1(R);
+        }
+        L ^= ctx.P[ROUNDCOUNT];
+        R ^= ctx.P[ROUNDCOUNT+1];
+        return (new int[] {R, L});
+    }
+   /*     do {
             if(i >= ROUNDCOUNT) {
                 i = k ^ ctx.P[ROUNDCOUNT];
                 j ^= ctx.P[ROUNDCOUNT + 1];
@@ -245,10 +252,20 @@ public class BlowFish
             j = l;
             i++;
         } while(true);
-    }
+    }*/
 
-    public int[] Blowfish_decipher(int a[], int b[]) {
-        int k = a[0];
+    public int[] Blowfish_decipher(int L, int R) {
+        int i;
+        for (i =ROUNDCOUNT; i > 0 ;i-=2 ) {
+            L ^= ctx.P[i+1];
+            R ^= ctx.F1(L);
+            R ^= ctx.P[i];
+            L ^= ctx.F1(R);
+        }
+        L ^= ctx.P[1];
+        R ^= ctx.P[0];
+        return (new int[] {R, L});
+        /*int k = a[0];
         int j = b[0];
         int i = ROUNDCOUNT + 1;
         do {
@@ -263,6 +280,6 @@ public class BlowFish
             k = j ^ ctx.F1(l);
             j = l;
             i--;
-        } while(true);
+        } while(true);*/
     }
 }
