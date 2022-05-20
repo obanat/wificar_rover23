@@ -158,61 +158,65 @@ public class WifiCar
         AppLog.d(TAG, "new WifiCar created successfully!");
     }
 
-    public boolean setConnect()
+    public boolean setConnect() throws IOException
     {
-        try{
-            createCommandSocket(targetHost, targetPort);
-            AppLog.i(TAG, (new StringBuilder("--->Socket:")).append(cmdSocket).toString());
-            if(!cmdSocket.isConnected()){
-                AppLog.i(TAG, "--->socket init failed!");
-                throw new IOException();
-            }
+        if (bConnected) {
+            AppLog.i(TAG, "--->alreay connect, just return");
+            return true;
+        }
+        createCommandSocket(targetHost, targetPort);
+        AppLog.i(TAG, (new StringBuilder("--->Socket:")).append(cmdSocket).toString());
+        if(!cmdSocket.isConnected()){
+            AppLog.i(TAG, "--->socket init failed!");
+            throw new IOException();
+        }
 
-            dataOutputStream = new DataOutputStream(cmdSocket.getOutputStream());
-            dataInputStream = new DataInputStream(cmdSocket.getInputStream());
-            byte abyte0[] = CommandEncoder.cmdLoginReq(0, 0, 0, 0);
-            dataOutputStream.write(abyte0);
-            dataOutputStream.flush();
-            Thread rev = new Thread(new Runnable() {
+        dataOutputStream = new DataOutputStream(cmdSocket.getOutputStream());
+        dataInputStream = new DataInputStream(cmdSocket.getInputStream());
+        byte abyte0[] = CommandEncoder.cmdLoginReq(0, 0, 0, 0);
+        dataOutputStream.write(abyte0);
+        dataOutputStream.flush();
+        Thread rev = new Thread(new Runnable() {
 
-                public void run()
-                {
-                    ByteArrayOutputStream bytearraybuffer = new ByteArrayOutputStream(0x100000);
-                    AppLog.i(TAG, "--->ready to read remote socket:");
+            public void run()//this is main receive loop
+            {
+                ByteArrayOutputStream bytearraybuffer = new ByteArrayOutputStream(0x100000);
+                AppLog.i(TAG, "--->ready to read remote socket:");
 
-                    int i;
+                int i;
+                do {
                     try {
                         i = dataInputStream.available();
-                        if(i <= 0) {
-                            AppLog.i(TAG, "--->read dataInputStream failed!");
-                            return;
-                        }
-
-                        byte abyte1[] = new byte[i];
-                        bytearraybuffer.write(abyte1, 0, dataInputStream.read(abyte1, 0, i));
-                        bytearraybuffer = CommandEncoder.parseCommand(instance, bytearraybuffer);
-                    }
-                    catch(IOException ioexception) {
+                    } catch(IOException ioexception) {
                         ioexception.printStackTrace();
-                        AppLog.i(TAG, (new StringBuilder("--->IOException:")).append(ioexception).append(" bConnected:").append(bConnected).toString());
+                        AppLog.i(TAG, "main receive loop ioexception!, just exit thread!");
                         //TODO:reconnect
                         return;
                     }
+                    if(i <= 0) {
+                        //AppLog.i(TAG, "--->read dataInputStream loop");
+                        continue;
+                    }
+                    AppLog.i(TAG, "--->read dataInputStream, len:" + i + " ready to parseCommand");
+                    byte abyte1[] = new byte[i];
+                    try {
+                        bytearraybuffer.write(abyte1, 0, dataInputStream.read(abyte1, 0, i));
+                        bytearraybuffer = CommandEncoder.parseCommand(instance, bytearraybuffer);
+                    } catch(IOException ioexception) {
+                        ioexception.printStackTrace();
+                        AppLog.i(TAG, "main parseCommand io exception!, just throw it!");
+                        //throw new IOException();
+                    }
+                } while(true);
 
-                }
-            });
-            rev.setName("Command Thread");
-            rev.start();
+            }
+        });
+        rev.setName("Command Thread");
+        rev.start();
 
-            bConnected = true;
-          }
-          catch(IOException ioexception){
-               AppLog.d(TAG, (new StringBuilder("--->setConnect IOException:")).append(ioexception).toString());
-               ioexception.printStackTrace();
-               return false;
-           }
-           return true;
-       }
+        bConnected = true;
+        return bConnected;
+    }
     
     private Socket createCommandSocket(String paramString, int paramInt) throws IOException {
       cmdSocket = SocketFactory.getDefault().createSocket();
@@ -230,10 +234,10 @@ public class WifiCar
         cameraId = id;
     }
 
-    public void verifyCommand()
+    public void verifyCommand(int a, int b, int c, int d)
     {
         try {
-        byte abyte0[] = CommandEncoder.cmdVerifyReq(getKey(), 0, 0, 0, 0);
+        byte abyte0[] = CommandEncoder.cmdVerifyReq(getKey(), a, b, c, d);
         dataOutputStream.write(abyte0);
         dataOutputStream.flush();
         startKeepAliveTask();
