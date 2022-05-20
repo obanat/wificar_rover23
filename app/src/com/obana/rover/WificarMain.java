@@ -38,6 +38,7 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ToggleButton;
+import java.io.*;
 
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -194,10 +195,15 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
           if ((ssid1 != null && ssid1.contains("Rover")) || (ssid2 != null && ssid2.contains("Rover"))) {
             WificarMain.this.ConnnectOut_timer = new Timer();
             WificarMain.this.ConnnectOut_timer.schedule(new WificarMain.ConnectOut(), 6000L);
-            boolean rest = WificarMain.this.wifiCar.setConnect();
-            AppLog.d(TAG, "--->connecting result:" + rest);
+            boolean rest = false;
+            try {
+                rest = WificarMain.this.wifiCar.setConnect();
+            } catch (IOException e) {
+                //do nothing
+            }
+            AppLog.d(TAG, "--->connect socket & main loop result:" + rest);
             //WificarMain.this.wifiCar.updatedChange();
-             sendToastMessage("socket connect succuess!");
+             sendToastMessage("Socket Connect Succuess!");
 
             return;
           }
