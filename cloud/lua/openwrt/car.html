@@ -1,0 +1,207 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>WifiCar</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel="stylesheet" href="_common/css/main.css" type="text/css" media="all">
+<link href="slider/slider.css" rel="stylesheet" type="text/css" />
+
+<script type="text/javascript" src="_common/js/mootools.js"></script>
+<script type="text/javascript" src="slider/slider.js"></script>
+</head>
+<script type="text/javascript">
+/* Copyright (C) 2007 obana(obana@163.com)
+   This program is free software; you can redistribute it and/or modify it
+   under the terms of the GNU General Public License, version 2. See the file
+   COPYING for details. */
+
+var imageNr = 0; // Serial number of current image
+var finished = new Array(); // References to img objects which have finished downloading
+var paused = false;
+var useUsb = false;
+
+function createImageLayer() {
+  var img = new Image();
+  img.style.position = "absolute";
+  img.style.zIndex = -1;
+  img.onload = imageOnload;
+  img.onclick = imageOnclick;
+  img.src = getHostAddr() + ":8080/?action=snapshot&n=" + (++imageNr);
+  var webcam = document.getElementById("webcam");
+  webcam.insertBefore(img, webcam.firstChild);
+}
+
+// Two layers are always present (except at the very beginning), to avoid flicker
+function imageOnload() {
+  this.style.zIndex = imageNr; // Image finished, bring to front!
+  while (1 < finished.length) {
+    var del = finished.shift(); // Delete old image(s) from document
+    del.parentNode.removeChild(del);
+  }
+  finished.push(this);
+  if (!paused) createImageLayer();
+}
+
+function imageOnclick() { // Clicking on the image will pause the stream
+  paused = !paused;
+  if (!paused) createImageLayer();
+}
+
+function sendSer(value){
+    var sendValue = "";
+    if (value == "left") {
+        sendValue = "255,0,3,0,255";
+    } else if (value == "right") {
+	    sendValue = "255,0,4,0,255";
+	} else if (value == "up") {
+	    sendValue = "255,0,1,0,255";
+	} else if (value == "down") {
+	    sendValue = "255,0,2,0,255";
+	} else if (value == "lenon") {
+	    sendValue = "255,4,3,0,255";
+	} else if (value == "lenoff") {
+	    sendValue = "255,4,2,0,255";
+	} else if (value == "stop") {
+	    sendValue = "255,0,0,0,255";
+	} else {
+	    sendValue = value;
+	}
+	//alert(getHostAddr() + "/cgi-bin/web2usbser?" + sendValue);
+	if (useUsb) {
+	    document.getElementById("ser").src=getHostAddr() + "/cgi-bin/web2usbser?" + sendValue;
+	} else {
+	    document.getElementById("ser").src=getHostAddr() + "/cgi-bin/web2ser?" + sendValue;
+	}
+}
+
+function setusb(){
+    if (useUsb == false) {
+	    useUsb = true;
+	} else {
+	    useUsb = false;
+	}
+}
+
+function sendSerial(id, value){
+	var sendValue = "255,1,1,";
+	var strId = "";
+	if (id == 0) {
+		strId = "00P";
+	} else {
+		return;
+	}
+	
+	if (value > 99) {
+		value = 100;
+	} 
+
+	if (value < 0) {
+	    value = 0;
+	}
+	
+	sendSer(sendValue + value + ",255");
+	//document.getElementById("ser").src=getHostAddr() + "/cgi-bin/web2ser?" + sendValue;
+}
+function check2(){
+  if (document.getElementById("checkbox1").checked == true) {
+      sendSer('lenon');
+  } else {
+      sendSer('lenoff');
+  }
+}
+
+window.addEvent('domready', function(){
+	var sliderV = new Slider('slideContainerV', 'slideHandleV',{
+		onComplete: function(val) {
+			$('pos1').setHTML(val);
+			sendSerial(0,val);
+		},
+		mode:'vertical', 
+		defaultstep:'20'});
+	var sliderH = new Slider('slideContainerH', 'slideHandleH',{
+		onComplete: function(val) {
+			$('pos2').setHTML(val);
+			sendSerial(1,val);
+		},
+		mode:'horizontal', 
+		defaultstep:'20'});
+});
+
+function getHostAddr() {
+	var href = parent.location.href;
+	var path = parent.location.pathname;
+    var lastIndex = href.indexOf(path,0);
+	if (lastIndex <= 0) {
+		//alert("index <= 00");
+		return "";
+	}
+	//alert(href.substring(0,lastIndex));
+	return href.substring(0,lastIndex);
+}
+</script>
+<body onload="createImageLayer();">
+<div style="float:left">
+<table>
+<tr>
+  <td><img id="ser" width="10" height="10"></td>
+  <td>
+    <div id="slideContainerV" height="250px"><div id="slideHandleV"></div></div></td>
+  </td>
+  <td>
+    <div id="webcam"><noscript><img src= getHostAddr() + ":8080/?action=snapshot" /></noscript></div>
+  </td>
+  
+</tr>
+  <td>  </td>
+  <td><div id="pos1" width="20px"></div></td>
+  
+  <td>  </td>
+</tr>
+</table>
+</div>
+
+<table>
+
+<tr>
+<td></td>
+<td><input type="button" style="height:50px;width:50px;" onclick="sendSer('up')" value="UP" /></td>
+<td></td>
+</tr>
+
+<tr>
+<td><input type="button" style="height:50px;width:50px;" onclick="sendSer('left')" value="LEFT" /></td>
+<td><input type="button" style="height:50px;width:50px;" onclick="sendSer('stop')" value="STOP" /></td>
+<td><input type="button" style="height:50px;width:50px;" onclick="sendSer('right')" value="RIGHT" /></td>
+</tr>
+
+<tr>
+<td></td>
+<td><input type="button" style="height:50px;width:50px;" onclick="sendSer('down')" value="DOWN" /></td>
+<td></td>
+</tr>
+
+</table>
+
+
+<table>
+
+<tr>
+<td><input type="checkbox" id="checkbox1" value="checkbox" onclick="check2()">Len ON</input></td>
+</tr>
+<tr>
+<td><a href="com.hanry.apk" " title="apk">Download android client</a></input></td>
+</tr>
+</table>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
