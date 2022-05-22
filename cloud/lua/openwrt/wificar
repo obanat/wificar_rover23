@@ -1,0 +1,15 @@
+#!/bin/sh /etc/rc.common
+
+START=80
+
+start() {
+        stty -F /dev/ttyATH0 raw speed 9600
+##	    mjpg_streamer -b -i "input_uvc.so -r 320x240 -f 15"  -o "output_http.so -p 8080 -w /web"
+        mjpg_streamer -b -i "input_uvc.so -r 320x240 -y -f 15" -o "output_http.so -p 8080 -w /www"
+		ser2net
+}
+
+stop(){
+	killall mjpg_streamer
+	killall ser2net
+}
