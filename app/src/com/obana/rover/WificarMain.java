@@ -211,8 +211,34 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
           sendToastMessage("wifi not match, just exit!");
         }
       };
+
+      //cloud socket thread 
+      Runnable cloudRunnable = new Runnable() {
+        public void run() {
+            AppLog.d(TAG, "--->cloud socket connecting .....");
+
+            boolean rest = false;
+            try {
+                rest = WificarMain.this.wifiCar.requestMobileSocket();
+            } catch (IOException e) {
+                AppLog.d(TAG, "--->Cloud Socket Connect failed!");
+                sendToastMessage("Cloud Socket Connect failed!");
+                return;
+                //do nothing
+            }
+            AppLog.d(TAG, "--->connect cloud socket & main loop result:" + rest);
+            //WificarMain.this.wifiCar.updatedChange();
+            //sendToastMessage("Cloud Socket Connect Succuess!");
+        }
+      };
+
+      //start wificar socket, use wifi connection
       if (this.wifiCar.isSocketConnected() == 0)
         (new Thread(runnable)).start(); 
+
+      //start cloud socket, use cell connection
+      if (this.wifiCar.isCloudSocketConnected() == 0)
+        (new Thread(cloudRunnable)).start(); 
   }
   
   protected void onStop() {

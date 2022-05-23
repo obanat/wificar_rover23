@@ -12,6 +12,12 @@ import android.os.Environment;
 import android.os.Handler;
 import android.widget.Toast;
 
+import android.net.ConnectivityManager;
+import android.net.NetworkRequest;
+import android.net.NetworkRequest.*;
+import android.net.NetworkCapabilities;
+import android.net.Network;
+
 import com.obana.rover.utils.*;
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -81,6 +87,7 @@ public class WifiCar
     String targetPassword;
     int targetPort;
     boolean bConnected = false;
+    boolean bmedia_Connected = false;
     //private VideoData vData;
 
     public WifiCar(Activity activity)
@@ -281,6 +288,20 @@ public class WifiCar
         dataOutputStream.flush();
         return true;
     }
+    public boolean enableAudio()
+        throws IOException
+    {
+        AppLog.d(TAG, "Enable audio ....");
+        boolean flag;
+        if(!bmedia_Connected){
+            return false;
+        } 
+
+        byte abyte0[] = CommandEncoder.cmdAudioStartReq();
+        dataOutputStream.write(abyte0);
+        dataOutputStream.flush();
+        return true;
+    }
 
     public int isSocketConnected() {
         try {
@@ -303,5 +324,198 @@ public class WifiCar
         dataOutputStream.write(abyte0);
         dataOutputStream.flush();
         return true;
+    }
+
+    static boolean bcloud_Connected = false;
+    Socket cloudSocket = null;
+    DataOutputStream cloudDataOutputStream;
+    DataInputStream cloudDataInputStream;
+
+    public boolean requestMobileSocket () throws IOException {
+        ConnectivityManager connectivityManager = (ConnectivityManager)(mainUI.getSystemService(Context.CONNECTIVITY_SERVICE));
+        NetworkRequest.Builder builder = new NetworkRequest.Builder();
+        builder.addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+
+        builder.addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR);
+        NetworkRequest build = builder.build();
+        AppLog.d(TAG, "--->Cloud request Mobile Network");
+        connectivityManager.requestNetwork(build, new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                super.onAvailable(network);
+                 AppLog.i(TAG, "--->cellular ready, creating socket....");
+                try {
+                    setCloudConnect(network);
+                } catch (Exception e) {
+                    return;
+                }
+            }
+        });
+        return true;
+    }
+    public boolean setCloudConnect(Network network) throws IOException
+    {
+        if (bcloud_Connected) {
+            AppLog.i(TAG, "--->alreay connect cloud socket, just return");
+            return true;
+        }
+
+        cloudSocket = SocketFactory.getDefault().createSocket();
+        cloudSocket.setSendBufferSize(1024 * 1024);//important, it make sure jpg data
+        InetSocketAddress inetSocketAddress = new InetSocketAddress("123.113.244.38", 19090);
+        AppLog.i(TAG, "--->cloud socket connecting .....");
+        network.bindSocket(cloudSocket);
+        cloudSocket.connect(inetSocketAddress, 5000);
+        AppLog.i(TAG, (new StringBuilder("--->Cloud Socket connected:")).append(cloudSocket).toString());
+        if(!cloudSocket.isConnected()){
+            AppLog.i(TAG, "--->cloud socket init failed!");
+            throw new IOException();
+        }
+
+        cloudDataOutputStream = new DataOutputStream(cloudSocket.getOutputStream());
+        cloudDataInputStream = new DataInputStream(cloudSocket.getInputStream());
+        byte abyte0[] = CommandEncoder.cmdLoginReq(0, 0, 0, 0);
+        cloudDataOutputStream.write(abyte0);
+        cloudDataOutputStream.flush();
+        Thread cloudRev = new Thread(new Runnable() {
+
+            public void run()//this is main receive loop
+            {
+                ByteArrayOutputStream bytearraybuffer = new ByteArrayOutputStream(1024);
+                AppLog.i(TAG, "--->ready to read cloud socket:");
+
+                int i;
+                do {
+                    try {
+                        i = cloudDataInputStream.available();
+                    } catch(IOException ioexception) {
+                        ioexception.printStackTrace();
+                        AppLog.i(TAG, "main receive loop io exception2!, just exit thread!");
+                        //TODO:reconnect
+                        return;
+                    }
+                    if(i <= 0) {
+                        //AppLog.i(TAG, "--->read dataInputStream loop");
+                        continue;
+                    }
+                    AppLog.i(TAG, "--->read cloud InputStream, len:" + i + " ready to parseCommand");
+                    byte abyte1[] = new byte[i];
+                    try {
+                        bytearraybuffer.reset();
+                        bytearraybuffer.write(abyte1, 0, cloudDataInputStream.read(abyte1, 0, i));
+                        //CommandEncoder.parseCommand(instance, bytearraybuffer);
+                        AppLog.i(TAG, "receive cloud socket data:" + new String(abyte1));
+                    } catch(IOException ioexception) {
+                        ioexception.printStackTrace();
+                        AppLog.i(TAG, "main parseCommand io exception!, just throw it!");
+                        //throw new IOException();
+                    }
+                } while(true);
+
+            }
+        });
+        cloudRev.setName("Cloud Command Thread");
+        cloudRev.start();
+
+        bcloud_Connected = true;
+        return bcloud_Connected;
+    }
+     public int isCloudSocketConnected() {
+        try {
+          if (cloudSocket == null)
+            return 0; 
+          boolean bool = cloudSocket.isConnected();
+            return 1;
+        } catch (Exception exception) {
+          exception.printStackTrace();
+        } 
+        return 0;
+    }
+
+    public void connectMediaReceiver(int i)throws IOException{
+
+        if (bmedia_Connected) {
+            AppLog.i(TAG, "--->alreay connect media socket, just return");
+            return;
+        }
+        AppLog.i(TAG, "--->media socket creating .....");
+        Socket socket = createMediaReceiverSocket(targetHost, targetPort);
+
+        if(!socket.isConnected()){
+            AppLog.i(TAG, "--->media socket connect failed!");
+            throw new IOException();
+        }
+
+        mediaReceiverOutputStream = new DataOutputStream(socket.getOutputStream());
+        mediaReceiverInputStream = new DataInputStream(socket.getInputStream());
+
+        byte abyte0[] = CommandEncoder.cmdMediaLoginReq(i);
+        mediaReceiverOutputStream.write(abyte0);
+        mediaReceiverOutputStream.flush();
+        
+        Thread mediaRev = new Thread(new Runnable() {
+
+            public void run()//this is media receive loop
+            {
+                ByteArrayOutputStream bytearraybuffer = new ByteArrayOutputStream(16*1024);
+                AppLog.i(TAG, "--->ready to read media socket:");
+
+                int i;
+                do {
+                    try {
+                        i = mediaReceiverInputStream.available();
+                    } catch(IOException ioexception) {
+                        ioexception.printStackTrace();
+                        AppLog.i(TAG, "media receive loop io exception2!, just exit thread!");
+                        //TODO:reconnect
+                        return;
+                    }
+                    if(i <= 0) {
+                        //AppLog.i(TAG, "--->read dataInputStream loop");
+                        continue;
+                    }
+                    AppLog.i(TAG, "--->read media InputStream, len:" + i + " ready to parseCommand");
+                    byte buf[] = new byte[i];
+                    try {
+                        //bytearraybuffer.reset();
+                        //bytearraybuffer.write(abyte1, 0, );
+                        mediaReceiverInputStream.read(buf, 0, i);
+                        CommandEncoder.parseMediaCommand(instance, buf, i);
+                        AppLog.i(TAG, "parse media socket data length:" + i);
+                        Thread.sleep(5L);
+                    } catch(Exception e) {
+                        e.printStackTrace();
+                        AppLog.i(TAG, "media parseCommand io exception!, just throw it!");
+                        //throw new IOException();
+                    }
+                } while(true);
+
+            }
+        });
+        mediaRev.setName("Media Thread");
+        mediaRev.start();
+        bmedia_Connected = true;
+    }
+
+    private Socket createMediaReceiverSocket(String host, int port)throws IOException {
+        receiverMediaSocket = SocketFactory.getDefault().createSocket();
+        InetSocketAddress addr = new InetSocketAddress(host, port);
+        AppLog.i(TAG, "--->media socket connecting .....");
+        receiverMediaSocket.connect(addr, 5000);
+
+        AppLog.i(TAG, "--->media socket connected .....");
+        return receiverMediaSocket;
+    }
+
+    public void onVideoReceived(byte[] jpgData) {
+        AppLog.i(TAG, "--->media socket sending .... len:" + jpgData.length);
+        try {
+            cloudDataOutputStream.write(jpgData);
+            cloudDataOutputStream.flush();
+            AppLog.i(TAG, "--->media socket sended!");
+        } catch(IOException ioexception) {
+            ioexception.printStackTrace();
+            AppLog.i(TAG, "media socket sending exception!");
+        }
     }
 }

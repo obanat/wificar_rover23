@@ -119,7 +119,7 @@ public class CommandEncoder
         }
     }
 
-
+    static byte mediaRecvBuf[] = new byte[0];
     public CommandEncoder()
     {
     }
@@ -704,8 +704,111 @@ _L5:
     public static void parseVideoStartResp(WifiCar wificar, byte abyte0[], int i)
         throws IOException
     {
-        byteArrayToInt(abyte0, 0, 2);
-        /*wificar.connectMediaReceiver(byteArrayToInt(abyte0, 2, 4));
-        wificar.enableAudio();*/
+        //byteArrayToInt(abyte0, 0, 2);
+        wificar.connectMediaReceiver(byteArrayToInt(abyte0, 2, 4));
+        //wificar.enableAudio();
+    }
+    
+    public static void parseMediaCommand(WifiCar wificar, byte[] buf, int i)
+        throws IOException
+    {
+        int k = findstr(buf, "MO_V");
+
+        // Yes
+        if (k  >= 0) {
+            // Already have media bytes?
+            if (mediaRecvBuf != null && mediaRecvBuf.length > 0) {
+                    
+                // Yes: add to media bytes up through start of new
+                //mediaRecvBuf += buf[0:k];
+                byte[] tmp = arrayCopy2(mediaRecvBuf, 0, mediaRecvBuf.length,
+                                    buf, 0, k);
+                mediaRecvBuf = tmp;
+
+                // Both video and audio messages are time-stamped in 10msec units
+                //timestamp = bytes_to_uint(mediabytes, 23)
+
+                // Video bytes: call processing routine
+                if ((int)mediaRecvBuf[4] == 1) {
+                    //self.rover.processVideo(mediabytes[36:], timestamp)
+                    wificar.onVideoReceived(arrayCopy(mediaRecvBuf, 36, mediaRecvBuf.length - 36));
+                // Audio bytes: call processing routine
+                } else{
+                    /*
+                    //ignor audio data
+                    audsize = bytes_to_uint(mediabytes, 36)
+                    sampend = 40 + audsize
+                    offset = bytes_to_short(mediabytes, sampend)
+                    index  = ord(mediabytes[sampend+2])
+                    pcmsamples = decodeADPCMToPCM(mediabytes[40:sampend], offset, index)
+                    self.rover.processAudio(pcmsamples, timestamp) 
+                    */ 
+                }
+                // Start over with new bytes    
+                //mediaRecvBuf = buf[k:]
+                mediaRecvBuf = arrayCopy(buf, k, buf.length - k);
+             
+            // No media bytes yet: start with new bytes
+            }else{
+                //mediaRecvBuf = buf[k:]
+                mediaRecvBuf = arrayCopy(buf, k, buf.length - k);
+            }
+        // No: accumulate media bytes
+        } else{
+            //mediaRecvBuf += buf;
+            byte[] tmp = arrayCopy2(mediaRecvBuf, 0, mediaRecvBuf.length,
+                                    buf, 0, buf.length);
+            mediaRecvBuf = tmp;
+        }
+    }
+
+public static void parseMediaCommandRaw(WifiCar wificar, byte[] buf, int i)
+        throws IOException
+    {
+        //TODO: make a copy
+        byte[] tmp = arrayCopy(buf, 0, i);
+        wificar.onVideoReceived(tmp);
+   
+    }
+
+    private static int findstr(byte[] buf, String str) {
+        if (str.length() == 4) {
+            byte[] str2byte = str.getBytes();
+            int i;
+            int len = buf.length;
+            for (i = 0; i < len -3; i++) {
+                if (buf[i] == str2byte[0] && buf[i+1] == str2byte[1]
+                    && buf[i+2] == str2byte[2] && buf[i+3] == str2byte[3]) {
+                    return i;
+                }
+            }
+        } 
+        return -1;
+    }
+
+    private static byte[] arrayCopy(byte[] src, int start, int len) {
+        if (src == null || start < 0 || len <= 0 || start + len > src.length) {
+            return null;
+        }
+        byte[] ret = new byte[len];
+        System.arraycopy(src, start, ret, 0, len);
+        return ret;
+    }
+
+    private static byte[] arrayCopy2(byte[] src1, int start1, int len1, byte[] src2, int start2, int len2) {
+        if (src1 == null || start1 < 0 ) {
+            return null;
+        }
+
+        if (src2 == null || start2 < 0 ) {
+            return null;
+        }
+        if (len1 + len2 <= 0) {
+            return null;
+        }
+        byte ret[] = new byte[len1 + len2];
+        System.arraycopy(src1, start1, ret, 0, len1);
+        System.arraycopy(src2, start2, ret, len1, len2);
+        return ret;
     }
 }
