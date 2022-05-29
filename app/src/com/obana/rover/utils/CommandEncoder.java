@@ -41,6 +41,7 @@ public class CommandEncoder
     public static final int VIDEO_START_RESP = 5;
     public static final String WIFICAR_OP = "MO_O";
     public static final String WIFICAR_VIDEO_OP = "MO_V";
+    public static final String WIFICAR_MEDIA = "WIFI_MEDIA";
     private static final String TAG = "WifiCar_CommandEncoder";
 
     static class Protocol
@@ -287,11 +288,13 @@ public class CommandEncoder
         throws IOException
     {
         AppLog.d(TAG, "cmdVerifyReq");
-        BlowFish blowfish = new BlowFish();
+        //remove useless code
+        //BlowFish blowfish = new BlowFish();
+        //blowfish.InitBlowfish(s.getBytes(), s.length());
+        //blowfish.Blowfish_encipher(i, j);
+        //blowfish.Blowfish_encipher(k, l);
+        //AppLog.d(TAG, "cmdVerifyReq3--->1:2:3:4====" + (long)(i & 0xFFFFFFFFL) + ":" + (long)(j & 0xFFFFFFFFL) + ":"+ (long)(k & 0xFFFFFFFFL) + ":"+ (long)(l & 0xFFFFFFFFL));
 
-        blowfish.InitBlowfish(s.getBytes(), s.length());
-        blowfish.Blowfish_encipher(i, j);
-        blowfish.Blowfish_encipher(k, l);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(int32ToByteArray(i));
         out.write(int32ToByteArray(j));
@@ -545,7 +548,10 @@ public class CommandEncoder
         AppLog.d(TAG, "--->parseLoginResp start");
 
         //if(byteArrayToInt(abyte0, 0, 2) != 0) return false;
-
+        if (abyte0.length < 59) {
+            AppLog.d(TAG, "UNKNOW LoginResp,JUST RETURN!");
+            return false;
+        }
         String cameraId = byteArrayToString(abyte0, 2, 13);
         AppLog.d(TAG, "--->camera id:" + cameraId);
 
@@ -662,10 +668,11 @@ _L5:
             prot = new Protocol("MO_O".getBytes(), 3, abyte0.length, abyte0);
         i = byteArrayToInt(prot.getContent(), 0, 2);
         AppLog.i(TAG, (new StringBuilder("--->Video Resp:")).append(i).toString());
+
         try
         {
-            AppLog.d(TAG, "--->enableVideo");
-            wificar.enableVideo();
+            AppLog.d(TAG, "--->enableVideo to off");
+            wificar.enableVideo(false);
         }
         // Misplaced declaration of an exception variable
         catch(IOException e)
@@ -730,8 +737,9 @@ _L5:
 
                 // Video bytes: call processing routine
                 if ((int)mediaRecvBuf[4] == 1) {
-                    //self.rover.processVideo(mediabytes[36:], timestamp)
-                    wificar.onVideoReceived(arrayCopy(mediaRecvBuf, 36, mediaRecvBuf.length - 36));
+                    //add WIFICAR_MEDIA for server side processing 
+                    wificar.onVideoReceived(arrayCopy2(WIFICAR_MEDIA.getBytes(), 0, WIFICAR_MEDIA.length(), 
+                                                mediaRecvBuf, 36, mediaRecvBuf.length - 36));
                 // Audio bytes: call processing routine
                 } else{
                     /*
@@ -810,5 +818,45 @@ public static void parseMediaCommandRaw(WifiCar wificar, byte[] buf, int i)
         System.arraycopy(src1, start1, ret, 0, len1);
         System.arraycopy(src2, start2, ret, len1, len2);
         return ret;
+    }
+
+    private static final String CLOUD_CMD_PREFIX = "MO_T";
+    public static void parseCloudCommand(WifiCar wificar, byte[] buf, int len)
+        throws IOException
+    {
+        //TODO: make a copy
+        String cmd = new String(buf);
+        AppLog.i(TAG, "parseCloudCommand:receive cloud socket data:" + cmd);
+        if (cmd.startsWith(CLOUD_CMD_PREFIX)) {
+            byte[] tmp = arrayCopy(buf, 4, len -4);
+            switch (tmp[0]) {
+                case 'M' :{
+                    AppLog.i(TAG, "parseCloudCommand:M");
+                    String a = new String(tmp);
+                    a = a.substring(1);
+                    String [] values = a.split("_");
+                    if (values.length == 2) {
+                        int left = Integer.parseInt(values[0]);
+                        int right = Integer.parseInt(values[1]);
+                        AppLog.i(TAG, "parseCloudCommand:move M:" + left + " :" + right);
+                        wificar.move(0, 10);
+                    }
+                    }
+                    break;
+                case 'C' :{
+                    AppLog.i(TAG, "parseCloudCommand:C");
+                    String a = new String(tmp);
+                    a = a.substring(1);
+                    if (a.equals("ON")) {
+                        wificar.enableVideo(true);
+                    } else {
+                        wificar.enableVideo(false);
+                    }
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 }

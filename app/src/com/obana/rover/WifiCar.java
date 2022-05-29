@@ -22,6 +22,7 @@ import com.obana.rover.utils.*;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.text.ParseException;
 import java.util.Timer;
@@ -86,8 +87,11 @@ public class WifiCar
     String targetId;
     String targetPassword;
     int targetPort;
-    boolean bConnected = false;
+    boolean bwificarConnected = false;
     boolean bmedia_Connected = false;
+    boolean bcloud_Connected = false;
+    
+    private static final String CLOUD_HOST_NAME = "cloud.obana.top";
     //private VideoData vData;
 
     public WifiCar(Activity activity)
@@ -131,7 +135,7 @@ public class WifiCar
         targetPassword = "AC13";
         targetCameraVer = "";
         targetDevID = "";
-        bConnected = false;
+        bwificarConnected = false;
         iTimeout = 5000;
         handlerGUI = null;
         //sfhGUI = null;
@@ -167,12 +171,12 @@ public class WifiCar
 
     public boolean setConnect() throws IOException
     {
-        if (bConnected) {
+        if (bwificarConnected) {
             AppLog.i(TAG, "--->alreay connect, just return");
             return true;
         }
         createCommandSocket(targetHost, targetPort);
-        AppLog.i(TAG, (new StringBuilder("--->Socket:")).append(cmdSocket).toString());
+        AppLog.i(TAG, "wificar connect successful! addr:" + targetHost);
         if(!cmdSocket.isConnected()){
             AppLog.i(TAG, "--->socket init failed!");
             throw new IOException();
@@ -222,8 +226,8 @@ public class WifiCar
         rev.setName("Command Thread");
         rev.start();
 
-        bConnected = true;
-        return bConnected;
+        bwificarConnected = true;
+        return bwificarConnected;
     }
     
     private Socket createCommandSocket(String paramString, int paramInt) throws IOException {
@@ -279,15 +283,24 @@ public class WifiCar
         }
     };
 
-    public boolean enableVideo()
+    public boolean enableVideo(boolean on)
         throws IOException
     {
         //WificarActivity.getInstance().sendMessage(8902);
-        byte abyte0[] = CommandEncoder.cmdVideoStartReq();
+        if(!bwificarConnected){
+            return false;
+        } 
+        byte [] abyte0;
+        if (on) {
+            abyte0 = CommandEncoder.cmdVideoStartReq();
+        } else {
+            abyte0 = CommandEncoder.cmdVideoEnd();
+        }
         dataOutputStream.write(abyte0);
         dataOutputStream.flush();
         return true;
     }
+
     public boolean enableAudio()
         throws IOException
     {
@@ -317,19 +330,26 @@ public class WifiCar
 
     public boolean move(int i, int j) throws IOException {
         byte abyte0[];
+        if (!bwificarConnected) return false;
 
-        abyte0 = CommandEncoder.cmdDeviceControlReq(4, j);
-        AppLog.d(TAG, (new StringBuilder("cmdDeviceControlReq(4):")).append(j).toString());
+        try {
+            abyte0 = CommandEncoder.cmdDeviceControlReq(4, j);
+            AppLog.d(TAG, (new StringBuilder("cmdDeviceControlReq(4):")).append(j).toString());
 
-        dataOutputStream.write(abyte0);
-        dataOutputStream.flush();
+            dataOutputStream.write(abyte0);
+            dataOutputStream.flush();
+        } catch(Exception ioexception) {
+            AppLog.i(TAG, "can not move wificar!");
+            //TODO:reconnect
+        }
+        
         return true;
     }
 
-    static boolean bcloud_Connected = false;
+
     Socket cloudSocket = null;
-    DataOutputStream cloudDataOutputStream;
-    DataInputStream cloudDataInputStream;
+    DataOutputStream cloudDataOutputStream = null;
+    DataInputStream cloudDataInputStream = null;
 
     public boolean requestMobileSocket () throws IOException {
         ConnectivityManager connectivityManager = (ConnectivityManager)(mainUI.getSystemService(Context.CONNECTIVITY_SERVICE));
@@ -343,7 +363,7 @@ public class WifiCar
             @Override
             public void onAvailable(Network network) {
                 super.onAvailable(network);
-                 AppLog.i(TAG, "--->cellular ready, creating socket....");
+                 AppLog.i(TAG, "--->cellular ready, create cloud socket....");
                 try {
                     setCloudConnect(network);
                 } catch (Exception e) {
@@ -361,10 +381,18 @@ public class WifiCar
         }
 
         cloudSocket = SocketFactory.getDefault().createSocket();
-        cloudSocket.setSendBufferSize(1024 * 1024);//important, it make sure jpg data
-        InetSocketAddress inetSocketAddress = new InetSocketAddress("123.113.244.38", 19090);
+        //cloudSocket.setSendBufferSize(128 * 1024);//important, it make sure jpg data
+
         AppLog.i(TAG, "--->cloud socket connecting .....");
+        if (network ==null) return false;
+        
+
+        InetAddress addr = network.getByName(CLOUD_HOST_NAME);
+        AppLog.i(TAG, "--->get dns addr:" + addr.getHostAddress());
+
         network.bindSocket(cloudSocket);
+        InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, 19090);
+
         cloudSocket.connect(inetSocketAddress, 5000);
         AppLog.i(TAG, (new StringBuilder("--->Cloud Socket connected:")).append(cloudSocket).toString());
         if(!cloudSocket.isConnected()){
@@ -398,13 +426,13 @@ public class WifiCar
                         //AppLog.i(TAG, "--->read dataInputStream loop");
                         continue;
                     }
-                    AppLog.i(TAG, "--->read cloud InputStream, len:" + i + " ready to parseCommand");
+                    AppLog.i(TAG, "--->read cloud InputStream, len:" + i + " ready to parseCloudCommand");
                     byte abyte1[] = new byte[i];
                     try {
                         bytearraybuffer.reset();
                         bytearraybuffer.write(abyte1, 0, cloudDataInputStream.read(abyte1, 0, i));
-                        //CommandEncoder.parseCommand(instance, bytearraybuffer);
-                        AppLog.i(TAG, "receive cloud socket data:" + new String(abyte1));
+                        CommandEncoder.parseCloudCommand(instance, abyte1, i);
+                        //AppLog.i(TAG, "receive cloud socket data:" + new String(abyte1));
                     } catch(IOException ioexception) {
                         ioexception.printStackTrace();
                         AppLog.i(TAG, "main parseCommand io exception!, just throw it!");
@@ -474,14 +502,14 @@ public class WifiCar
                         //AppLog.i(TAG, "--->read dataInputStream loop");
                         continue;
                     }
-                    AppLog.i(TAG, "--->read media InputStream, len:" + i + " ready to parseCommand");
+                    //AppLog.i(TAG, "--->read media InputStream, len:" + i + " ready to parseCommand");
                     byte buf[] = new byte[i];
                     try {
                         //bytearraybuffer.reset();
                         //bytearraybuffer.write(abyte1, 0, );
                         mediaReceiverInputStream.read(buf, 0, i);
                         CommandEncoder.parseMediaCommand(instance, buf, i);
-                        AppLog.i(TAG, "parse media socket data length:" + i);
+                        //AppLog.i(TAG, "parse media socket data length:" + i);
                         Thread.sleep(5L);
                     } catch(Exception e) {
                         e.printStackTrace();
@@ -509,10 +537,13 @@ public class WifiCar
 
     public void onVideoReceived(byte[] jpgData) {
         AppLog.i(TAG, "--->media socket sending .... len:" + jpgData.length);
+
         try {
-            cloudDataOutputStream.write(jpgData);
-            cloudDataOutputStream.flush();
-            AppLog.i(TAG, "--->media socket sended!");
+            if (cloudDataOutputStream != null && isCloudSocketConnected() > 0) {
+                cloudDataOutputStream.write(jpgData);
+                cloudDataOutputStream.flush();
+                AppLog.i(TAG, "--->media socket sended! buf size:" + cloudSocket.getSendBufferSize());
+            }
         } catch(IOException ioexception) {
             ioexception.printStackTrace();
             AppLog.i(TAG, "media socket sending exception!");

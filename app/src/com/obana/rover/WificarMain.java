@@ -181,7 +181,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     AppLog.i(TAG, "on Resume");
     Runnable runnable = new Runnable() {
         public void run() {
-          AppLog.d(TAG, "--->socket connecting .....");
+          AppLog.d(TAG, "--->onResume. connecting to wificar & cloud .....");
 
           WifiInfo wifiInfo = ((WifiManager)WificarMain.this.getSystemService("wifi")).getConnectionInfo();
           String ssid1 = wifiInfo.getSSID().toString();
@@ -197,12 +197,13 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
             WificarMain.this.ConnnectOut_timer = new Timer();
             WificarMain.this.ConnnectOut_timer.schedule(new WificarMain.ConnectOut(), 6000L);
             boolean rest = false;
+            AppLog.d(TAG, "--->wificar socket connecting .....");
             try {
                 rest = WificarMain.this.wifiCar.setConnect();
             } catch (IOException e) {
                 //do nothing
             }
-            AppLog.d(TAG, "--->connect socket & main loop result:" + rest);
+            AppLog.d(TAG, "--->wificar socket connect result:" + rest);
             //WificarMain.this.wifiCar.updatedChange();
              sendToastMessage("Socket Connect Succuess!");
 

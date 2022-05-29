@@ -7,11 +7,9 @@ android_app {
     resource_dirs: [
         "res",
     ],
-    static_libs: [
-        "androidx.appcompat_appcompat",
-    ],
+
     srcs: ["src/**/*.java"],
-    sdk_version: "28",
+    sdk_version: "26",
     optimize: {
         proguard_flags_files: ["proguard.flags"],
     },
