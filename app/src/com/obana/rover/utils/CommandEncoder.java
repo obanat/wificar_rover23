@@ -487,7 +487,12 @@ public class CommandEncoder
     public static ByteArrayOutputStream parseCommand(WifiCar wificar, ByteArrayOutputStream bytearraybuffer)
         throws IOException
     {
+
         byte abyte0[] = bytearraybuffer.toByteArray();
+
+        int k = findstr(abyte0, "MO_O");
+        if (k < 0) return null;
+
         if(abyte0.length <= 23) return bytearraybuffer;
 
         int i;
@@ -500,7 +505,7 @@ public class CommandEncoder
         switch(protocol.getOp())
         {
         default:
-            return bytearraybuffer;
+            return null;
 
         case 1: // '\001'
             boolean flag = parseLoginResp(wificar, protocol.getContent(), 1);
@@ -526,6 +531,8 @@ public class CommandEncoder
 
         case 252: 
             parseFetchBatteryPowerResp(wificar, protocol.getContent(), 1);
+            return bytearraybuffer;
+        case 18: 
             return bytearraybuffer;
         }
         //return bytearraybuffer;
@@ -740,6 +747,7 @@ _L5:
                     //add WIFICAR_MEDIA for server side processing 
                     wificar.onVideoReceived(arrayCopy2(WIFICAR_MEDIA.getBytes(), 0, WIFICAR_MEDIA.length(), 
                                                 mediaRecvBuf, 36, mediaRecvBuf.length - 36));
+                    wificar.refreshView(arrayCopy(mediaRecvBuf, 36, mediaRecvBuf.length - 36));
                 // Audio bytes: call processing routine
                 } else{
                     /*

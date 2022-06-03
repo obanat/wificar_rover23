@@ -28,7 +28,9 @@ import java.text.ParseException;
 import java.util.Timer;
 import java.util.TimerTask;
 import javax.net.SocketFactory;
-//import org.apache.http.util.ByteArrayBuffer;
+import java.net.Inet6Address;
+import java.net.ServerSocket;
+
 
 // Referenced classes of package com.wificar.component:
 //            AudioComponent, VideoComponent, AudioData, VideoData, 
@@ -41,7 +43,7 @@ public class WifiCar
     private int battery_value;
     private int battery_valueStop;
     String cameraId;
-    private int carStateMode;
+    private int carStateMode;//0-local;1-cloud
     private boolean changeFlag;
     DataInputStream dataInputStream;
     DataOutputStream dataOutputStream;
@@ -92,6 +94,7 @@ public class WifiCar
     boolean bcloud_Connected = false;
     
     private static final String CLOUD_HOST_NAME = "cloud.obana.top";
+    private static final int CLOUD_PORT = 19090;
     //private VideoData vData;
 
     public WifiCar(Activity activity)
@@ -155,7 +158,7 @@ public class WifiCar
 
         cameraId = "123";
         deviceId = "";
-        carStateMode = 0;
+        carStateMode = 1;//cloud mode
         recordTimer = null;
         playTimer = null;
         startRecordTimeStamp = 0L;
@@ -175,8 +178,22 @@ public class WifiCar
             AppLog.i(TAG, "--->alreay connect, just return");
             return true;
         }
-        createCommandSocket(targetHost, targetPort);
-        AppLog.i(TAG, "wificar connect successful! addr:" + targetHost);
+        if (carStateMode == 0) {
+            createCommandSocket(targetHost, targetPort);
+        } else {    
+            ConnectivityManager connectivityManager = (ConnectivityManager)(mainUI.getSystemService(Context.CONNECTIVITY_SERVICE));
+            Network network = connectivityManager.getActiveNetwork();
+            if (network ==null) return false;
+
+            InetAddress addr = network.getByName(CLOUD_HOST_NAME);
+            AppLog.i(TAG, "--->get dns addr:" + addr.getHostAddress());
+
+            //network.bindSocket(cloudSocket);
+            InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, CLOUD_PORT);
+            cmdSocket = SocketFactory.getDefault().createSocket();
+            cmdSocket.connect(inetSocketAddress, 5000);
+        }
+        AppLog.i(TAG, "wificar connect successful! addr:" + CLOUD_HOST_NAME);
         if(!cmdSocket.isConnected()){
             AppLog.i(TAG, "--->socket init failed!");
             throw new IOException();
@@ -191,7 +208,7 @@ public class WifiCar
 
             public void run()//this is main receive loop
             {
-                ByteArrayOutputStream bytearraybuffer = new ByteArrayOutputStream(1024);
+                ByteArrayOutputStream bytearraybuffer = new ByteArrayOutputStream(32*1024);
                 AppLog.i(TAG, "--->ready to read remote socket:");
 
                 int i;
@@ -213,7 +230,11 @@ public class WifiCar
                     try {
                         bytearraybuffer.reset();
                         bytearraybuffer.write(abyte1, 0, dataInputStream.read(abyte1, 0, i));
-                        CommandEncoder.parseCommand(instance, bytearraybuffer);
+                        ByteArrayOutputStream tmp = CommandEncoder.parseCommand(instance, bytearraybuffer);
+                        
+                        if (tmp == null && carStateMode > 0 /*cloud mode use combined socket*/) {
+                            CommandEncoder.parseMediaCommand(instance, abyte1, i);
+                        }
                     } catch(IOException ioexception) {
                         ioexception.printStackTrace();
                         AppLog.i(TAG, "main parseCommand io exception!, just throw it!");
@@ -258,10 +279,13 @@ public class WifiCar
         }
     }
 
-    public void startKeepAliveTask()
+    private void startKeepAliveTask()
     {
-        AppLog.d(TAG, "startKeepAliveTask");
-        keepAliveTimer.schedule(KeepAliveTask, 1000L, 30000L);
+        try {
+            AppLog.d(TAG, "startKeepAliveTask");
+            keepAliveTimer.schedule(KeepAliveTask, 1000L, 30000L);
+        } catch (Exception e) {
+        }
     }
 
     private TimerTask KeepAliveTask = new TimerTask() {
@@ -333,7 +357,7 @@ public class WifiCar
         if (!bwificarConnected) return false;
 
         try {
-            abyte0 = CommandEncoder.cmdDeviceControlReq(4, j);
+            abyte0 = CommandEncoder.cmdDeviceControlReq(i, j);
             AppLog.d(TAG, (new StringBuilder("cmdDeviceControlReq(4):")).append(j).toString());
 
             dataOutputStream.write(abyte0);
@@ -461,7 +485,12 @@ public class WifiCar
     }
 
     public void connectMediaReceiver(int i)throws IOException{
-
+        if (carStateMode > 0/*cloud mode use combined socket*/) {
+            //byte abyte0[] = CommandEncoder.cmdMediaLoginReq(i);//this will be send by proxy, no need to send by client
+            //dataOutputStream.write(abyte0);
+            //dataOutputStream.flush();
+            return;
+        }
         if (bmedia_Connected) {
             AppLog.i(TAG, "--->alreay connect media socket, just return");
             return;
@@ -548,5 +577,12 @@ public class WifiCar
             ioexception.printStackTrace();
             AppLog.i(TAG, "media socket sending exception!");
         }
+    }
+
+    public void refreshView(byte[] jpgData) {
+        AppLog.i(TAG, "--->send jpeg data to main activity.... len:" + jpgData.length);
+
+        WificarMain main = (WificarMain)mainUI;
+        main.mJpegView.setCameraBytes(jpgData);
     }
 }

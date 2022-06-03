@@ -49,6 +49,9 @@ import android.net.wifi.WifiManager;
 import java.util.Timer;
 import java.util.TimerTask;
 import com.obana.rover.utils.*;
+import android.graphics.drawable.Drawable;
+import android.view.View.OnClickListener;
+
 public class WificarMain extends Activity implements View.OnClickListener, View.OnTouchListener, Chronometer.OnChronometerTickListener {
   private static final int DOUBLE_PRESS_INTERVAL = 2000;
   
@@ -138,8 +141,38 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
   private WifiCar wifiCar = null;
   private Handler handler = null;
   private int LMoving = 0;
+  
+  private WheelView mControlView;
+  private double mLastTimeCon;
+  private int counter = 0;
+  private static final int TIME_INTERVAL_MS = 500;
+  private int mLeft = 4;
+  private int mLeftSpeed = 0;
+  private int mRight = 1;
+  private int mRightSpeed = 0;
+
+  public MjpegView mJpegView;
+  private ImageButton mJpegButton;
+  private boolean mJpegStart;
+  private Drawable buttonJpegStart;
+  private Drawable buttonJpegStop;
+
+
   protected void onCreate(Bundle paramBundle) {
     super.onCreate(paramBundle);
+
+    setContentView(R.layout.main);
+    mControlView = findViewById(R.id.conntrolView);
+    mControlView.setOnWheelViewMoveListener(mControlerListener);
+
+    mJpegView = findViewById(R.id.jpegView);
+
+    //button to enable/disable jpeg view
+    mJpegButton = findViewById(R.id.startJpegButton);
+    mJpegButton.setOnClickListener(buttonJpegClickListener);
+    mJpegStart = false;
+    buttonJpegStart = getResources().getDrawable(R.drawable.sym_light);
+    buttonJpegStop = getResources().getDrawable(R.drawable.sym_light_off);
 
     this.wifiCar = new WifiCar(this);
     this.handler = new Handler() {
@@ -149,8 +182,6 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         }    
       }
     };
-    this.wificarLayoutParams = WificarLayoutParams.getWificarLayoutParams(this);
-    setHLayoutparams();
   }
   
   public void setHLayoutparams()
@@ -193,9 +224,9 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
           String ssid2 = networkInfo.getExtraInfo();
           AppLog.d(TAG, "---->wifi connected, ssid2:" + ssid2 + " ip:" + int2ip(addr));
           
-          if ((ssid1 != null && ssid1.contains("Rover")) || (ssid2 != null && ssid2.contains("Rover"))) {
+          //if ((ssid1 != null && ssid1.contains("Rover")) || (ssid2 != null && ssid2.contains("Rover"))) {
             WificarMain.this.ConnnectOut_timer = new Timer();
-            WificarMain.this.ConnnectOut_timer.schedule(new WificarMain.ConnectOut(), 6000L);
+            //WificarMain.this.ConnnectOut_timer.schedule(new WificarMain.ConnectOut(), 6000L);
             boolean rest = false;
             AppLog.d(TAG, "--->wificar socket connecting .....");
             try {
@@ -208,8 +239,8 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
              sendToastMessage("Socket Connect Succuess!");
 
             return;
-          }
-          sendToastMessage("wifi not match, just exit!");
+          //}
+          //sendToastMessage("wifi not match, just exit!");
         }
       };
 
@@ -219,14 +250,14 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
             AppLog.d(TAG, "--->cloud socket connecting .....");
 
             boolean rest = false;
-            try {
+            /*try {
                 rest = WificarMain.this.wifiCar.requestMobileSocket();
             } catch (IOException e) {
                 AppLog.d(TAG, "--->Cloud Socket Connect failed!");
                 sendToastMessage("Cloud Socket Connect failed!");
                 return;
                 //do nothing
-            }
+            }*/
             AppLog.d(TAG, "--->connect cloud socket & main loop result:" + rest);
             //WificarMain.this.wifiCar.updatedChange();
             //sendToastMessage("Cloud Socket Connect Succuess!");
@@ -327,29 +358,114 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
 
  private Thread LMovingTask2s = new Thread() {
     public void run() {
-        do {
-            AppLog.i(TAG, "run move in 100ms");
-            try {
-              WificarMain.this.wifiCar.move(0, 10);
-            } catch (IOException iOException) {
-              iOException.printStackTrace();
-            } 
-
-            if (WificarMain.this.LMoving < 30) {
-                //WificarMain.this.handler.postDelayed(this, 100L);
-                try {
-                    Thread.sleep(500);
-                } catch (Exception e) {
-                    AppLog.e(TAG, "sleep Exception");
-                }
-                WificarMain.this.LMoving += 1;
-                AppLog.i(TAG, "run move in 100ms,LMoving:" + WificarMain.this.LMoving);
-            } else {
-                WificarMain.this.LMoving = 0;
-                //WificarMain.this.handler.removeCallbacks(this);
-                return;
-            }
-        } while (true);
+        AppLog.i(TAG, "run move in 100ms");
+        try {
+            WificarMain.this.wifiCar.move(WificarMain.this.mLeft, WificarMain.this.mLeftSpeed);
+            WificarMain.this.wifiCar.move(WificarMain.this.mRight, WificarMain.this.mRightSpeed); 
+        } catch (IOException iOException) {
+          iOException.printStackTrace();
+        } 
     }
   };
+
+ private Thread videoEnableThread = new Thread() {
+    public void run() {
+        AppLog.i(TAG, "videoEnable:" + mJpegStart);
+        try {
+            WificarMain.this.wifiCar.enableVideo(mJpegStart);
+        } catch (IOException iOException) {
+          iOException.printStackTrace();
+        } 
+    }
+  };
+
+  WheelView.OnWheelViewMoveListener mControlerListener = new WheelView.OnWheelViewMoveListener() {
+        @Override
+        public void onValueChanged(int status, float angle, float distance){
+            //
+
+            if (status == 100) {
+                mLastTimeCon = System.currentTimeMillis();
+                counter = 0;
+            } else if (status == 200) {
+                double now = System.currentTimeMillis();
+                if (now - mLastTimeCon > TIME_INTERVAL_MS) {
+                    //report & counter
+
+                    Log.i("WHEELVIEW","move, status:" + status + " counter:" + counter);
+                    //caculate left,leftspeed, right,right speed;
+                    int left = 4;int right = 1;
+                    int leftspeed = 0;int rightspeed = 0;
+
+                    if (distance <= 30) {
+                        //stop
+                        leftspeed = rightspeed = 0;
+                    } else if( ( angle >=0 && angle <= 10) || (angle >= 350 && angle <= 360) ){
+                        //forward
+                        left =4;right = 1;
+                        leftspeed = rightspeed = Math.round(distance / 10);
+                    } else if (angle >= 280 && angle <= 350) {
+                        //left & forward
+                        left =4;right = 1;
+                        leftspeed = Math.round(distance * ((angle-270)/90)/20);
+                        rightspeed = Math.round(distance / 10);
+                    } else if (angle > 10 && angle < 80) {
+                        //right & forward
+                        left =4;right = 1;
+                        leftspeed = Math.round(distance / 10);
+                        rightspeed = Math.round(distance * ((90-angle)/90)/20);
+                    } else if (angle >= 260 && angle <= 280) {
+                        //treat as left & forward
+                        left =5;right = 1;
+                        leftspeed = Math.round(distance / 10);
+                        rightspeed = Math.round(distance / 10);
+                    } else if (angle >= 80 && angle <= 100) {
+                        //reat as right & forward
+                        left =4;right = 2;
+                        leftspeed = Math.round(distance / 10);
+                        rightspeed = Math.round(distance / 10);
+                    } else {
+                        //backward
+                        left =5;right = 2;
+                        leftspeed = rightspeed = Math.round(distance / 10);
+                    }
+
+                    WificarMain.this.mLeft = left;
+                    WificarMain.this.mLeftSpeed = leftspeed;
+                    WificarMain.this.mRight = right;
+                    WificarMain.this.mRightSpeed = rightspeed;
+                    (new Thread(LMovingTask2s)).start();
+                    counter = 0;
+                    mLastTimeCon = now;
+                } else {
+                    //ignore value change
+                    counter ++;
+                }
+            } else {
+                //stop
+                WificarMain.this.mLeft = 4;
+                WificarMain.this.mLeftSpeed = 0;
+                WificarMain.this.mRight = 1;
+                WificarMain.this.mRightSpeed = 0;
+                (new Thread(LMovingTask2s)).start();
+            }
+        }
+    };
+    
+    private OnClickListener buttonJpegClickListener = new OnClickListener() {
+        public void onClick(View arg0) {
+          if (mJpegStart) {
+              mJpegStart = false;
+              mJpegView.stopPlayback();
+              mJpegButton.setImageDrawable(buttonJpegStop);
+              mJpegButton.invalidateDrawable(buttonJpegStop);
+          } else  {
+              mJpegStart = true;
+              mJpegView.startPlayback();
+              mJpegButton.setImageDrawable(buttonJpegStart);
+              mJpegButton.invalidateDrawable(buttonJpegStart);
+          }
+          (new Thread(videoEnableThread)).start();
+        }
+    };
 }
