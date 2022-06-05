@@ -151,20 +151,6 @@ public class BlowFish
                             0,0};// rover2.0 use 0 as key_org
     }
 
-    /*public int[] Blowfish_decipher(int a[], int b[])
-    {
-        int[] tmp = new int[] {a[0], b[0]};
-        decrypt(tmp);
-        return new int[] {tmp[0], tmp[1]};
-    }
-
-    public int[] Blowfish_encipher(int a[], int b[])
-    {    
-        int[] tmp = new int[] {a[0], b[0]};
-        encrypt(tmp);
-        return new int[] {tmp[0], tmp[1]};
-    }*/
-
     public void InitBlowfish(byte key[], int length)
     {
         int i,j;
@@ -199,32 +185,6 @@ public class BlowFish
         }
     }
 
-    public void encrypt(int[] array2) {
-        //Accepts a pair of numbers and returns them in encrypted form.
-        int i;
-        for(i = 0; i< 16; i += 2){
-           array2[0] ^= ctx.P[i];
-           //array2[1] ^= ctx.ff(array2[0]);
-           array2[1] ^= ctx.P[i+1];
-           //array2[0] ^= ctx.ff(array2[1]);
-        }
-        array2[0] ^= ctx.P[16];
-        array2[1] ^= ctx.P[17];
-    }
-
-    public void decrypt(int[] array2) {
-        //Accepts an encrypted pair of numbers and returns them in unencrypted 
-        //  form.
-        int i;
-        for(i = 16; i > 0; i -= 2){
-           array2[0] ^= ctx.P[i+1];
-           //array2[1] ^= ctx.ff(array2[0]);
-           array2[1] ^= ctx.P[i];
-           //array2[0] ^= ctx.ff(array2[1]);
-        }
-        array2[0] ^= ctx.P[1];
-        array2[1] ^= ctx.P[0];
-    }
 
     public int[] Blowfish_encipher(int L, int R){
 
@@ -239,20 +199,6 @@ public class BlowFish
         R ^= ctx.P[ROUNDCOUNT+1];
         return (new int[] {R, L});
     }
-   /*     do {
-            if(i >= ROUNDCOUNT) {
-                i = k ^ ctx.P[ROUNDCOUNT];
-                j ^= ctx.P[ROUNDCOUNT + 1];
-                a[0] = j;
-                b[0] = i;
-                return (new int[] {j, i});
-            }
-            int l = k ^ ctx.P[i];
-            k = j ^ ctx.F1(l);
-            j = l;
-            i++;
-        } while(true);
-    }*/
 
     public int[] Blowfish_decipher(int L, int R) {
         int i;
@@ -265,21 +211,5 @@ public class BlowFish
         L ^= ctx.P[1];
         R ^= ctx.P[0];
         return (new int[] {R, L});
-        /*int k = a[0];
-        int j = b[0];
-        int i = ROUNDCOUNT + 1;
-        do {
-            if(i <= 1) {
-                i = k ^ ctx.P[1];
-                j ^= ctx.P[0];
-                a[0] = j;
-                b[0] = i;
-                return (new int[] {j, i});
-            }
-            int l = k ^ ctx.P[i];
-            k = j ^ ctx.F1(l);
-            j = l;
-            i--;
-        } while(true);*/
     }
 }

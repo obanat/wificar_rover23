@@ -19,6 +19,7 @@ import java.util.HashMap;
 
 /**
  * Created by Vander on 2018/7/16.
+ * Modify by obana on 2022/6/4.
  */
 
 public class WheelView extends View implements View.OnTouchListener{
@@ -101,13 +102,9 @@ public class WheelView extends View implements View.OnTouchListener{
             default://center
                 iniCenter(getWidth() / 2 , getHeight()/2 );
                 break;
-
         }
-
     }
 
-
-    //�������ĳ�ʼֵ
     private float initCenterX, initCenterY;
     public void iniCenter(float x, float y){
         initCenterX = x;
@@ -125,27 +122,18 @@ public class WheelView extends View implements View.OnTouchListener{
         invalidate();
     }
 
-    //СԲ����
     private float moveCenterX, moveCenterY;
 
-
-
-    //��Բ
     private int big_bg;
     private Bitmap bigCircle;
     private Paint bigCirclePaint;
     private int bigcircle_radius;;
 
-
-    //СԲ
     private int small_bg;
     private Bitmap smallCircle;
     private Paint smallCirclePaint;
     private int smallcircle_radius;
     //private int controllerSize;
-
-
-
 
     private void initWheelView(){
         bigCirclePaint = new Paint(1);
@@ -166,20 +154,17 @@ public class WheelView extends View implements View.OnTouchListener{
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        //ȡ����е�Сֵ����Ϊ���ֵ
         int w = measure(widthMeasureSpec);
         int h = measure(heightMeasureSpec);
-        //�����ֵ���������������߸���������Ҫռ�ö��ٿ��
         setMeasuredDimension(w, h);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
     }
 
-    /** ������ߵķ��� */
     private int measure(int paramInt) {
         int i = MeasureSpec.getMode(paramInt);
         int j = MeasureSpec.getSize(paramInt);
-        if (i == 0)//��ģʽ=0ʱ����ʾ android:layout_width="wrap_content"
-            return dip2px(200);//��ʱ����Ĭ�Ͽ��Ϊ200
+        if (i == 0)// android:layout_width="wrap_content"
+            return dip2px(200);
         return j;
     }
 
@@ -193,39 +178,19 @@ public class WheelView extends View implements View.OnTouchListener{
         }
         Matrix matrix = new Matrix(); 
 
-        matrix.postRotate(this.lastAngle/* > 180 ? 180-this.lastAngle : this.lastAngle*/,  (float) bigcircle_radius, (float) bigcircle_radius);
+        matrix.postRotate(this.lastAngle, (float) bigcircle_radius, (float) bigcircle_radius);
         matrix.postTranslate((float) centerX-bigcircle_radius, (float) centerY-bigcircle_radius);  
-        /*float targetX, targetY;
-        if (this.lastAngle == 90) {
-            targetX = bigCircle.getHeight();
-            targetY = 0;
-        } else {
-            targetX = bigCircle.getHeight();
-            targetY = bigCircle.getWidth();
-        }
 
-        final float[] values = new float[9];
-        matrix.getValues(values);
-
-        float x1 = values[Matrix.MTRANS_X];
-        float y1 = values[Matrix.MTRANS_Y];
-
-        matrix.postTranslate(targetX - x1, targetY - y1);*/
-    
-        //Bitmap dstbmp = Bitmap.createBitmap(bigCircle, 0,0,bigcircle_radius*2, bigcircle_radius*2, matrix, true);
-        //Canvas cvs = new Canvas(dstbmp);
-        //canvas.drawBitmap(bigCircle, centerX - bigcircle_radius,centerY - bigcircle_radius, bigCirclePaint);
-        Log.e("WHEELVIEW","move, centerX:" + centerX+ ":" + centerY + ":" + bigcircle_radius);
+        //new add feature: add direction indication
+        //Log.e("WHEELVIEW","move, centerX:" + centerX+ ":" + centerY + ":" + bigcircle_radius);
         canvas.drawBitmap(bigCircle, matrix, bigCirclePaint);
         canvas.drawBitmap(smallCircle, moveCenterX - smallcircle_radius, moveCenterY - smallcircle_radius, smallCirclePaint);
     }
-
 
     public int dip2px(float dipValue)
     {
         return (int)(dipValue * scale + 0.5f) ;
     }
-
 
     @Override
     public boolean onTouch(View v, MotionEvent event) {
@@ -237,7 +202,6 @@ public class WheelView extends View implements View.OnTouchListener{
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-
 
         if(event.getAction() == MotionEvent.ACTION_DOWN){
             setCenter(event.getX(), event.getY());
@@ -259,12 +223,11 @@ public class WheelView extends View implements View.OnTouchListener{
                 if ((this.thread != null) && (this.thread.isAlive()))
                     this.thread.interrupt();
                 //this.thread = new Thread(runnable);
-                //this.thread.start();//��ָ���¿�ʼ
+                //this.thread.start();//remove useless code
 
                 this.lastAngle = 1;//getAngle();
 
                 if (this.wheelViewMoveListener != null)
-                    //�Զ���ӿڴ������¼�
                     this.wheelViewMoveListener.onValueChanged(100, this.lastAngle, getDistance());
             }
 
@@ -272,7 +235,7 @@ public class WheelView extends View implements View.OnTouchListener{
         } else if(event.getAction() == MotionEvent.ACTION_MOVE){
             this.position_X = (int) event.getX();
             this.position_Y = (int) event.getY();
-            double d = Math.sqrt(//X�����ƽ��+Y�����ƽ���ٿ�ƽ��
+            double d = Math.sqrt(
                     Math.pow(this.position_X - this.centerX, 2) +
                             Math.pow(this.position_Y - this.centerY, 2));
 
@@ -290,20 +253,6 @@ public class WheelView extends View implements View.OnTouchListener{
 
             invalidate();
 
-            //this.lastAngle = (this.lastAngle % 45) > 25 ? ((int)(this.lastAngle / 45) + 1)  * 45: (int)(this.lastAngle / 45) * 45;
-//            if((this.lastAngle % 45) > 22.5){
-//                moveCenterX = (float) (Math.cos(((int)(this.lastAngle / 45) + 1)  * PI4) * this.lastDistance + centerX);
-//                moveCenterY = (float) (Math.sin(((int)(this.lastAngle / 45) + 1)  * PI4) * this.lastDistance + centerY);
-//
-//            } else {
-//                moveCenterX = (float) (Math.cos(((int)(this.lastAngle / 45)) * PI4) * this.lastDistance + centerX);
-//                moveCenterY = (float) (Math.sin(((int)(this.lastAngle / 45)) * PI4) * this.lastDistance + centerY);
-//
-//            }
-
-
-
-            //Log.e("WHEELVIEW","move, angle:" + this.lastAngle+ " dis:" + getDistance());
             if (this.wheelViewMoveListener != null)
                 this.wheelViewMoveListener.onValueChanged(200, this.lastAngle, getDistance());
 
@@ -313,7 +262,7 @@ public class WheelView extends View implements View.OnTouchListener{
             this.position_X = (int) this.centerX;
             this.position_Y = (int) this.centerY;
             if ((this.thread != null) && (this.thread.isAlive()))
-                this.thread.interrupt();//��ָ̧��ʱ�жϣ�����һ��λ�úͷ���ļ���
+                this.thread.interrupt();
 
             this.lastAngle = getAngle();
 
@@ -330,7 +279,7 @@ public class WheelView extends View implements View.OnTouchListener{
 
     private float getAngle() {
         if (this.position_X > this.centerX) {
-            if (this.position_Y < this.centerY) {//���Ͻǣ���һ����
+            if (this.position_Y < this.centerY) {
                 float m = (float) (90.0D + 57.295779500000002D * Math
                         .atan((position_Y - this.centerY)
                                 / (this.position_X - this.centerX)));
@@ -338,7 +287,7 @@ public class WheelView extends View implements View.OnTouchListener{
                 this.lastAngle = m;
                 return m;
             }
-            if (this.position_Y > this.centerY) {//���½ǣ��ڶ�����
+            if (this.position_Y > this.centerY) {
                 float k = 90 + (float) (57.295779500000002D * Math
                         .atan((this.position_Y - this.centerY)
                                 / (this.position_X - this.centerX)));
@@ -350,7 +299,7 @@ public class WheelView extends View implements View.OnTouchListener{
             return 90;
         }
         if (this.position_X < this.centerX) {
-            if (this.position_Y < this.centerY) {//���Ͻǣ���������
+            if (this.position_Y < this.centerY) {
                 float j = (float) (57.295779500000002D * Math
                         .atan((this.position_Y - this.centerY)
                                 / (this.position_X - this.centerX)) - 90.0D);
@@ -358,7 +307,7 @@ public class WheelView extends View implements View.OnTouchListener{
                 this.lastAngle = j;
                 return j;
             }
-            if (this.position_Y > this.centerY) {//���½ǣ���������
+            if (this.position_Y > this.centerY) {
                 float i = -90	+ (float) (57.295779500000002D * Math
                         .atan((this.position_Y - this.centerY)
                                 / (this.position_X - this.centerX)));
@@ -381,7 +330,6 @@ public class WheelView extends View implements View.OnTouchListener{
         return 180;
     }
 
-    /** �õ�����λ�������ĵľ���(�ٷֱ�) */
     private float getDistance() {
         this.lastDistance= (float)(100.0D * Math.sqrt(
                 Math.pow(this.position_X - this.centerX, 2) +
@@ -391,11 +339,8 @@ public class WheelView extends View implements View.OnTouchListener{
     }
 
 
-    /** ����ʱ������Ĭ��Ϊ100���� */
     private long loopInterval = 100L;
-    /** ��ָ����֮���ѭ�������߳� */
     private Thread thread;
-    /** �¼������̵߳�ʵ�� */
     private Runnable runnable = new Runnable() {
         @Override
         public void run() {
@@ -430,11 +375,6 @@ public class WheelView extends View implements View.OnTouchListener{
     }
 
     public abstract interface OnWheelViewMoveListener {
-        /**
-         * �ӿڻص�����
-         * @param angle		�Ƕ�
-         * @param distance	����
-         */
         public abstract void onValueChanged(int status, float angle, float distance);
     }
 

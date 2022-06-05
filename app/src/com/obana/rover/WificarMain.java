@@ -14,6 +14,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.SharedPreferences.Editor;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -37,6 +38,8 @@ import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Switch;
+import android.widget.CompoundButton;
 import android.widget.ToggleButton;
 import java.io.*;
 
@@ -166,7 +169,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     mControlView.setOnWheelViewMoveListener(mControlerListener);
 
     mJpegView = findViewById(R.id.jpegView);
-
+    findViewById(R.id.startWifiButton).setOnClickListener(buttonWifiClickListener);;
     //button to enable/disable jpeg view
     mJpegButton = findViewById(R.id.startJpegButton);
     mJpegButton.setOnClickListener(buttonJpegClickListener);
@@ -182,18 +185,33 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         }    
       }
     };
-  }
-  
-  public void setHLayoutparams()
-  {
-        this.Parent = new RelativeLayout(getApplicationContext());
-        setContentView(this.Parent, wificarLayoutParams.parentParams);
-        this.Parent.setOnTouchListener(this);
-        //refreshUIListener();
+
+    SharedPreferences sp = getSharedPreferences("wificar", Context.MODE_PRIVATE);
+
+    final Switch mVersionSwitch = (Switch) findViewById(R.id.versionSwitch);
+    int version = sp.getInt("version",2);
+    wifiCar.setVersion(version);
+    mVersionSwitch.setChecked(version == 3);
+    mVersionSwitch.setShowText(true);
+    //mVersionSwitch.setText(version == 3 ? "Ver3.0" : "Ver2.0");
+    mVersionSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+      public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
+        Log.i(TAG, "car version user switch changed:" + b);
+        int ver = b?3:2;//destination version;
+        WificarMain.this.wifiCar.setVersion(ver);
+        Editor editor = sp.edit();
+        editor.putInt("version", ver);
+        editor.commit();
+        //mVersionSwitch.setText(version == 3 ? "Ver3.0" : "Ver2.0");
+        (new Thread(reLoginTask)).start();
+      }
+    });
   }
 
+
+
   public boolean onKeyDown(int paramInt, KeyEvent paramKeyEvent) {
-	Log.e(TAG, "onKeyDown key=" + paramInt + " event=" + paramKeyEvent);
+    Log.i(TAG, "onKeyDown key=" + paramInt + " event=" + paramKeyEvent);
     Toast.makeText(this, "k:" + paramInt + " k:" + paramKeyEvent.getKeyCode(), Toast.LENGTH_SHORT).show(); 
     return super.onKeyDown(paramInt, paramKeyEvent);
   }
@@ -206,71 +224,40 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     
     super.onPause();
   }
-  
+
+    Runnable connectRunnable = new Runnable() {
+        public void run() {
+            ConnectivityManager connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo wifiNetworkInfo = connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+            if (wifiNetworkInfo.isConnected()) {
+
+                WificarMain.this.ConnnectOut_timer = new Timer();
+
+                AppLog.d(TAG, "--->connectRunnable. connecting to wificar.....");
+                boolean result = false;
+                try {
+                    result = WificarMain.this.wifiCar.setCmdConnect();
+                } catch (IOException e) {
+
+                }
+                if (result) {
+                    AppLog.d(TAG, "--->wificar socket connect Succuess!");
+                    sendToastMessage("Socket Connect Succuess!");
+                } else {
+                    AppLog.d(TAG, "--->wificar socket connect failed!");
+                    sendToastMessage("Socket Connect Failed!");
+                }
+            }
+        }
+    };
+
   protected void onResume() {
     super.onResume();
     AppLog.i(TAG, "on Resume");
-    Runnable runnable = new Runnable() {
-        public void run() {
-          AppLog.d(TAG, "--->onResume. connecting to wificar & cloud .....");
-
-          WifiInfo wifiInfo = ((WifiManager)WificarMain.this.getSystemService("wifi")).getConnectionInfo();
-          String ssid1 = wifiInfo.getSSID().toString();
-          int addr = wifiInfo.getIpAddress();
-          AppLog.d(TAG, "---->wifi connected, ssid1:" + ssid1);
-
-          ConnectivityManager cm = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
-          NetworkInfo networkInfo = cm.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
-          String ssid2 = networkInfo.getExtraInfo();
-          AppLog.d(TAG, "---->wifi connected, ssid2:" + ssid2 + " ip:" + int2ip(addr));
-          
-          //if ((ssid1 != null && ssid1.contains("Rover")) || (ssid2 != null && ssid2.contains("Rover"))) {
-            WificarMain.this.ConnnectOut_timer = new Timer();
-            //WificarMain.this.ConnnectOut_timer.schedule(new WificarMain.ConnectOut(), 6000L);
-            boolean rest = false;
-            AppLog.d(TAG, "--->wificar socket connecting .....");
-            try {
-                rest = WificarMain.this.wifiCar.setConnect();
-            } catch (IOException e) {
-                //do nothing
-            }
-            AppLog.d(TAG, "--->wificar socket connect result:" + rest);
-            //WificarMain.this.wifiCar.updatedChange();
-             sendToastMessage("Socket Connect Succuess!");
-
-            return;
-          //}
-          //sendToastMessage("wifi not match, just exit!");
-        }
-      };
-
-      //cloud socket thread 
-      Runnable cloudRunnable = new Runnable() {
-        public void run() {
-            AppLog.d(TAG, "--->cloud socket connecting .....");
-
-            boolean rest = false;
-            /*try {
-                rest = WificarMain.this.wifiCar.requestMobileSocket();
-            } catch (IOException e) {
-                AppLog.d(TAG, "--->Cloud Socket Connect failed!");
-                sendToastMessage("Cloud Socket Connect failed!");
-                return;
-                //do nothing
-            }*/
-            AppLog.d(TAG, "--->connect cloud socket & main loop result:" + rest);
-            //WificarMain.this.wifiCar.updatedChange();
-            //sendToastMessage("Cloud Socket Connect Succuess!");
-        }
-      };
+    
 
       //start wificar socket, use wifi connection
-      if (this.wifiCar.isSocketConnected() == 0)
-        (new Thread(runnable)).start(); 
-
-      //start cloud socket, use cell connection
-      if (this.wifiCar.isCloudSocketConnected() == 0)
-        (new Thread(cloudRunnable)).start(); 
+      if (this.wifiCar.isSocketConnected() == 0) (new Thread(connectRunnable)).start(); 
   }
   
   protected void onStop() {
@@ -282,6 +269,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     AppLog.d(TAG, "on destory");
 
     this.handler.removeCallbacks(this.LMovingTask2s);
+    this.handler.removeCallbacks(this.LMovingTask3s);
 
   }
   public void onClick(View paramView) {
@@ -326,7 +314,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         sb.append((ipInt >> 24) & 0xFF);
         return sb.toString();
   }
- public boolean handleMessageinUI(Message param1Message) {
+  public boolean handleMessageinUI(Message param1Message) {
     boolean handled = false;
     switch (param1Message.what) {
       case MESSAGE_CONNECT_TO_CAR_FAIL:
@@ -345,34 +333,34 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         return false;
     }
     return handled;
- }
+  }
 
- public void sendToastMessage(String str) {
+  public void sendToastMessage(String str) {
      Bundle bundle = new Bundle();
      bundle.putString(BUNDLE_KEY_TOAST_MSG, str);
 
      Message msg = handler.obtainMessage(MESSAGE_MAKE_TOAST);
      msg.setData(bundle);
      handler.sendMessage(msg);
- }
+  }
 
- private Thread LMovingTask2s = new Thread() {
+  private Thread LMovingTask2s = new Thread() {
     public void run() {
         AppLog.i(TAG, "run move in 100ms");
         try {
             WificarMain.this.wifiCar.move(WificarMain.this.mLeft, WificarMain.this.mLeftSpeed);
             WificarMain.this.wifiCar.move(WificarMain.this.mRight, WificarMain.this.mRightSpeed); 
         } catch (IOException iOException) {
-          iOException.printStackTrace();
+            iOException.printStackTrace();
         } 
     }
   };
 
- private Thread videoEnableThread = new Thread() {
+  private Thread videoEnableThread = new Thread() {
     public void run() {
         AppLog.i(TAG, "videoEnable:" + mJpegStart);
         try {
-            WificarMain.this.wifiCar.enableVideo(mJpegStart);
+            WificarMain.this.wifiCar.enableVideo(mJpegStart, true);
         } catch (IOException iOException) {
           iOException.printStackTrace();
         } 
@@ -394,47 +382,11 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
 
                     Log.i("WHEELVIEW","move, status:" + status + " counter:" + counter);
                     //caculate left,leftspeed, right,right speed;
-                    int left = 4;int right = 1;
-                    int leftspeed = 0;int rightspeed = 0;
-
-                    if (distance <= 30) {
-                        //stop
-                        leftspeed = rightspeed = 0;
-                    } else if( ( angle >=0 && angle <= 10) || (angle >= 350 && angle <= 360) ){
-                        //forward
-                        left =4;right = 1;
-                        leftspeed = rightspeed = Math.round(distance / 10);
-                    } else if (angle >= 280 && angle <= 350) {
-                        //left & forward
-                        left =4;right = 1;
-                        leftspeed = Math.round(distance * ((angle-270)/90)/20);
-                        rightspeed = Math.round(distance / 10);
-                    } else if (angle > 10 && angle < 80) {
-                        //right & forward
-                        left =4;right = 1;
-                        leftspeed = Math.round(distance / 10);
-                        rightspeed = Math.round(distance * ((90-angle)/90)/20);
-                    } else if (angle >= 260 && angle <= 280) {
-                        //treat as left & forward
-                        left =5;right = 1;
-                        leftspeed = Math.round(distance / 10);
-                        rightspeed = Math.round(distance / 10);
-                    } else if (angle >= 80 && angle <= 100) {
-                        //reat as right & forward
-                        left =4;right = 2;
-                        leftspeed = Math.round(distance / 10);
-                        rightspeed = Math.round(distance / 10);
+                    if (WificarMain.this.wifiCar.isVersion20()) {
+                        sendMoveCommand20(status, angle, distance);
                     } else {
-                        //backward
-                        left =5;right = 2;
-                        leftspeed = rightspeed = Math.round(distance / 10);
+                        sendMoveCommand30(status, angle, distance);
                     }
-
-                    WificarMain.this.mLeft = left;
-                    WificarMain.this.mLeftSpeed = leftspeed;
-                    WificarMain.this.mRight = right;
-                    WificarMain.this.mRightSpeed = rightspeed;
-                    (new Thread(LMovingTask2s)).start();
                     counter = 0;
                     mLastTimeCon = now;
                 } else {
@@ -443,15 +395,150 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                 }
             } else {
                 //stop
-                WificarMain.this.mLeft = 4;
-                WificarMain.this.mLeftSpeed = 0;
-                WificarMain.this.mRight = 1;
-                WificarMain.this.mRightSpeed = 0;
-                (new Thread(LMovingTask2s)).start();
+                if (WificarMain.this.wifiCar.isVersion20()) {
+                    sendMoveCommand20(status, angle, distance);
+                } else {
+                    sendMoveCommand30(status, angle, distance);
+                }
             }
         }
     };
     
+    void sendMoveCommand20(int status, float angle, float distance) {
+        if (status == 200) {
+            int left = 4;int right = 1;
+            int leftspeed = 0;int rightspeed = 0;
+
+            if (distance <= 30) {
+                //stop
+                leftspeed = rightspeed = 0;
+            } else if( ( angle >=0 && angle <= 10) || (angle >= 350 && angle <= 360) ){
+                //forward
+                left =4;right = 1;
+                leftspeed = rightspeed = Math.round(distance / 10);
+            } else if (angle >= 280 && angle <= 350) {
+                //left & forward
+                left =4;right = 1;
+                leftspeed = Math.round(distance * ((angle-270)/90)/20);
+                rightspeed = Math.round(distance / 10);
+            } else if (angle > 10 && angle < 80) {
+                //right & forward
+                left =4;right = 1;
+                leftspeed = Math.round(distance / 10);
+                rightspeed = Math.round(distance * ((90-angle)/90)/20);
+            } else if (angle >= 260 && angle <= 280) {
+                //treat as left & forward
+                left =5;right = 1;
+                leftspeed = Math.round(distance / 10);
+                rightspeed = Math.round(distance / 10);
+            } else if (angle >= 80 && angle <= 100) {
+                //reat as right & forward
+                left =4;right = 2;
+                leftspeed = Math.round(distance / 10);
+                rightspeed = Math.round(distance / 10);
+            } else {
+                //backward
+                left =5;right = 2;
+                leftspeed = rightspeed = Math.round(distance / 10);
+            }
+
+            WificarMain.this.mLeft = left;
+            WificarMain.this.mLeftSpeed = leftspeed;
+            WificarMain.this.mRight = right;
+            WificarMain.this.mRightSpeed = rightspeed;
+            (new Thread(LMovingTask2s)).start();
+        } else {
+            WificarMain.this.mLeft = 4;
+            WificarMain.this.mLeftSpeed = 0;
+            WificarMain.this.mRight = 1;
+            WificarMain.this.mRightSpeed = 0;
+            (new Thread(LMovingTask2s)).start();
+        }
+    }
+
+    int mForward = 0; 
+    int mDirect = 3;
+    boolean mHalfspeed = false;
+    boolean mHalfRLSpeed=false;
+    void sendMoveCommand30(int status, float angle, float distance) {
+        if (status == 200) {//moving
+            int forward = 0; //0-stop;1-forward;2-backward
+            int direct = 3;//5-left;3-middle;4-right
+            boolean halfspeed = false; boolean halfRLSpeed = false;
+
+            if (distance <= 30) {
+                //stop
+                forward = 0; direct = 3;
+            } else if( ( angle >=0 && angle <= 10) || (angle >= 350 && angle <= 360) ){
+                //forward
+                forward = 1; direct = 3;
+                halfspeed = distance <=80?true:false;halfRLSpeed=false;
+            } else if (angle >= 280 && angle <= 350) {
+                //left & forward
+                forward = 1; direct = 5;
+                halfspeed = distance <=80?true:false;halfRLSpeed=true;
+            } else if (angle > 10 && angle < 80) {
+                //right & forward
+                forward = 1; direct = 4;
+                halfspeed = distance <=80?true:false;halfRLSpeed=true;
+            } else if (angle >= 260 && angle <= 280) {
+                //treat as left & forward, with high RLSpeed
+                forward = 1; direct = 5;
+                halfspeed = distance <=80?true:false;halfRLSpeed=false;
+            } else if (angle >= 80 && angle <= 100) {
+                //treat as right & forward, with high RLSpeed
+                forward = 1; direct = 4;
+                halfspeed = distance <=80?true:false;halfRLSpeed=false;
+            } else if (angle >= 100 && angle <= 170) {
+                //left & backward
+                forward = 2; direct = 5;
+                halfspeed = distance <=80?true:false;halfRLSpeed=false;//TODO:
+            } else if (angle >= 190 && angle <= 260) {
+                //right & backward
+                forward = 2; direct = 4;
+                halfspeed = distance <=80?true:false;halfRLSpeed=false;//TODO:
+            } else {
+                //backward
+                forward = 2; direct = 3;
+                halfspeed = distance <=80?true:false;halfRLSpeed=false;
+            }
+
+            WificarMain.this.mForward = forward;
+            WificarMain.this.mDirect = direct;
+            WificarMain.this.mHalfspeed = halfspeed;
+            WificarMain.this.mHalfRLSpeed = halfRLSpeed;
+            (new Thread(LMovingTask3s)).start();
+        } else {//up
+            WificarMain.this.mForward = 0;
+            WificarMain.this.mDirect = 3;
+            WificarMain.this.mHalfspeed = false;
+            WificarMain.this.mHalfRLSpeed = false;
+            (new Thread(LMovingTask3s)).start();
+        }
+    }
+
+    private Thread LMovingTask3s = new Thread() {
+        public void run() {
+            AppLog.i(TAG, "run move for version 3.0");
+            try {
+                WificarMain.this.wifiCar.move(WificarMain.this.mForward, WificarMain.this.mHalfspeed?1:0);
+                WificarMain.this.wifiCar.move(WificarMain.this.mDirect, WificarMain.this.mHalfRLSpeed?1:0); 
+            } catch (IOException iOException) {
+              iOException.printStackTrace();
+            } 
+        }
+    };
+    
+    private Thread reLoginTask = new Thread() {
+        public void run() {
+            AppLog.i(TAG, "run reLoginTask");
+            try {
+                WificarMain.this.wifiCar.reLogin();
+            } catch (IOException iOException) {
+              iOException.printStackTrace();
+            } 
+        }
+    };
     private OnClickListener buttonJpegClickListener = new OnClickListener() {
         public void onClick(View arg0) {
           if (mJpegStart) {
@@ -466,6 +553,13 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
               mJpegButton.invalidateDrawable(buttonJpegStart);
           }
           (new Thread(videoEnableThread)).start();
+        }
+    };
+
+    private OnClickListener buttonWifiClickListener = new OnClickListener() {
+        public void onClick(View arg0) {
+          Intent wifiSettingsIntent = new Intent("android.settings.WIFI_SETTINGS");
+            startActivity(wifiSettingsIntent);
         }
     };
 }

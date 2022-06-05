@@ -288,12 +288,6 @@ public class CommandEncoder
         throws IOException
     {
         AppLog.d(TAG, "cmdVerifyReq");
-        //remove useless code
-        //BlowFish blowfish = new BlowFish();
-        //blowfish.InitBlowfish(s.getBytes(), s.length());
-        //blowfish.Blowfish_encipher(i, j);
-        //blowfish.Blowfish_encipher(k, l);
-        //AppLog.d(TAG, "cmdVerifyReq3--->1:2:3:4====" + (long)(i & 0xFFFFFFFFL) + ":" + (long)(j & 0xFFFFFFFFL) + ":"+ (long)(k & 0xFFFFFFFFL) + ":"+ (long)(l & 0xFFFFFFFFL));
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(int32ToByteArray(i));
@@ -327,23 +321,6 @@ public class CommandEncoder
         return (new Protocol("MO_O".getBytes(), 4, 1, bytebuffer.array())).output();
     }
 
-    /*public static Protocol createTalkData(TalkData talkdata)
-        throws IOException
-    {
-        ByteArrayOutputStream bytearrayoutputstream = new ByteArrayOutputStream();
-        byte abyte0[] = int32ToByteArray(talkdata.getTicktime());
-        byte abyte1[] = int32ToByteArray(talkdata.getSerial());
-        byte abyte2[] = int32ToByteArray(talkdata.getTimestamp());
-        byte abyte3[] = int8ToByteArray(0);
-        byte abyte4[] = int32ToByteArray(talkdata.getData().length);
-        bytearrayoutputstream.write(abyte0);
-        bytearrayoutputstream.write(abyte1);
-        bytearrayoutputstream.write(abyte2);
-        bytearrayoutputstream.write(abyte3);
-        bytearrayoutputstream.write(abyte4);
-        bytearrayoutputstream.write(talkdata.getData());
-        return new Protocol("MO_V".getBytes(), 3, bytearrayoutputstream.size(), bytearrayoutputstream.toByteArray());
-    }*/
 
     public static int getPrefixCount(byte abyte0[], int i)
     {
@@ -484,56 +461,53 @@ public class CommandEncoder
         }
     }
 
-    public static ByteArrayOutputStream parseCommand(WifiCar wificar, ByteArrayOutputStream bytearraybuffer)
+    public static int parseCommand(WifiCar wificar, byte abyte0[], int i)
         throws IOException
     {
 
-        byte abyte0[] = bytearraybuffer.toByteArray();
+        int k = findstr(abyte0, i, "MO_O");
+        if (k < 0) return -1;
 
-        int k = findstr(abyte0, "MO_O");
-        if (k < 0) return null;
+        if(i <= 23) return -1;
 
-        if(abyte0.length <= 23) return bytearraybuffer;
-
-        int i;
         int op = ByteUtility.byteArrayToInt(abyte0, 4, 2);
         int len = ByteUtility.byteArrayToInt(abyte0, 15, 4);
-        AppLog.d(TAG, "--->receive [" + abyte0.length + "] bytes data op:" + op + " len:" + len);
+        AppLog.d(TAG, "--->receive [" + i + "] bytes data op:" + op + " len:" + len);
         //if(abyte0.length >= i + 23) return bytearraybuffer;
 
         Protocol protocol = new Protocol(abyte0, 0);
         switch(protocol.getOp())
         {
         default:
-            return null;
+            return -1;
 
         case 1: // '\001'
             boolean flag = parseLoginResp(wificar, protocol.getContent(), 1);
             AppLog.d(TAG, (new StringBuilder("--->login:")).append(flag).toString());
-            return bytearraybuffer;
+            return 1;
 
         case 3: // '\003'
             int j = parseVerifyResp(wificar, protocol.getContent(), 1);
             AppLog.d(TAG, (new StringBuilder("--->VERIFY_RESP:")).append(j).toString());
-            return bytearraybuffer;
+            return 1;
 
         case 5: // '\005'
             parseVideoStartResp(wificar, protocol.getContent(), 1);
-            return bytearraybuffer;
+            return 1;
 
         case 9: // '\t'
             parseAudioStartResp(wificar, protocol.getContent(), 1);
-            return bytearraybuffer;
+            return 1;
 
         case 12: // '\f'
             parseTalkStartResp(wificar, protocol.getContent(), 1);
-            return bytearraybuffer;
+            return 1;
 
         case 252: 
             parseFetchBatteryPowerResp(wificar, protocol.getContent(), 1);
-            return bytearraybuffer;
+            return 1;
         case 18: 
-            return bytearraybuffer;
+            return 1;
         }
         //return bytearraybuffer;
     }
@@ -554,107 +528,45 @@ public class CommandEncoder
     {
         AppLog.d(TAG, "--->parseLoginResp start");
 
-        //if(byteArrayToInt(abyte0, 0, 2) != 0) return false;
-        if (abyte0.length < 59) {
+        if(byteArrayToInt(abyte0, 0, 2) != 0) return false;
+        int minLen = wificar.isVersion20()?0x3B:0x3E;
+        if (abyte0.length < minLen) {/*0x3B for 2.0,0x3E for 3.0*/
             AppLog.d(TAG, "UNKNOW LoginResp,JUST RETURN!");
             return false;
         }
-        String cameraId = byteArrayToString(abyte0, 2, 13);
-        AppLog.d(TAG, "--->camera id:" + cameraId);
 
-        //wificar.setDeviceId((new StringBuilder(String.valueOf(obj[0]))).append(".").append(obj[1]).append(".").append(obj[2]).append(".").append(obj[3]).toString());
+        String cameraId;
+        int L1, L2, R1, R2;
+        if (wificar.isVersion20()) {
+            cameraId = byteArrayToString(abyte0, 2, 13);
+            L1 = byteArrayToInt(abyte0, 43, 4);
+            R1 = byteArrayToInt(abyte0, 47, 4);
+            L2 = byteArrayToInt(abyte0, 51, 4);
+            R2 = byteArrayToInt(abyte0, 55, 4);
+        } else {
+            cameraId = byteArrayToString(abyte0, 2, 19);
+            L1 = byteArrayToInt(abyte0, 46, 4);
+            R1 = byteArrayToInt(abyte0, 50, 4);
+            L2 = byteArrayToInt(abyte0, 54, 4);
+            R2 = byteArrayToInt(abyte0, 58, 4);
+        }
+
+        AppLog.d(TAG, "--->camera id:" + cameraId);
         wificar.setCameraId(cameraId);
 
-        int L1 = byteArrayToInt(abyte0, 43, 4);
-        int R1 = byteArrayToInt(abyte0, 47, 4);
-        int L2 = byteArrayToInt(abyte0, 51, 4);
-        int R2 = byteArrayToInt(abyte0, 55, 4);
-        //wificar.setChallengeReverse(0, i1);
-        //wificar.setChallengeReverse(1, j1);
-        //wificar.setChallengeReverse(2, k1);
-        //wificar.setChallengeReverse(3, l1);
         BlowFish bf = new BlowFish();
         AppLog.d(TAG, "--->BlowFish init start");
         bf.InitBlowfish(wificar.getKey().getBytes(), wificar.getKey().length());
-        AppLog.d(TAG, "--->BlowFish init end; key:" + wificar.getKey());
         int[] ret = bf.Blowfish_encipher(L1, R1);
         L1 = ret[0]; R1 = ret[1];
         ret = bf.Blowfish_encipher(L2, R2);
         L2 = ret[0]; R2 = ret[1];
-        /*if(!sss1.equals(s3) || !s1.equals(s4) || !((String) (sss2)).equals(s5) || !s2.equals(s6))
-            return false; /* Loop/switch isn't completed */
+
         AppLog.d(TAG, "--->======ready to send verifyCommand");
         wificar.verifyCommand(L1,R1,L2,R2);
         return true;
-
     }
 
-    public static ByteArrayOutputStream parseMediaCommand(WifiCar wificar, ByteArrayOutputStream bytearraybuffer, int i)
-        throws IOException
-    {/*
-        int j;
-        int k;
-        int l;
-        byte abyte0[];
-        abyte0 = bytearraybuffer.toByteArray();
-        j = 0;
-        k = 0;
-        if(0 < 0)
-            return bytearraybuffer;
-        l = 0;
-_L6:
-        if(j >= 0) goto _L2; else goto _L1
-_L1:
-        bytearraybuffer.clear();
-        bytearraybuffer.append(abyte0, k, abyte0.length - k);
-        return bytearraybuffer;
-_L2:
-        int j1 = l + 1;
-        if(abyte0.length - j < 23) goto _L1; else goto _L3
-_L3:
-        ByteUtility.byteArrayToInt(abyte0, j + 4, 2);
-        l = ByteUtility.byteArrayToInt(abyte0, j + 15, 4);
-        if(abyte0.length - j < l + 23) goto _L1; else goto _L4
-_L4:
-        Protocol protocol;
-        if(i < 20000 && bytearraybuffer.length() < 0x10000)
-        {
-            protocol = new Protocol(abyte0, j);
-            if(protocol != null)
-            {
-                switch(protocol.getOp())
-                {
-                default:
-                    break;
-
-                case 2: // '\002'
-                    break; /* Loop/switch isn't completed 
-
-                case 1: // '\001'
-                    break;
-                }
-                break MISSING_BLOCK_LABEL_213;
-            }
-        }
-_L7:
-        int i1 = j + (l + 23);
-        l = j1;
-        j = i1;
-        if(i1 >= 0)
-        {
-            k = i1;
-            l = j1;
-            j = i1;
-        }
-        if(true) goto _L6; else goto _L5
-_L5:
-        Log.e("media", "audio data");
-        parseAudioData(wificar, protocol.output());
-          goto _L7
-        parseVideoData(wificar, protocol.output());
-          goto _L7*/
-          return null;
-    }
 
     public static void parseTalkStartResp(WifiCar wificar, byte abyte0[], int i)
     {
@@ -668,18 +580,11 @@ _L5:
     public static int parseVerifyResp(WifiCar wificar, byte abyte0[], int i)
     {
         AppLog.d(TAG, "--->cmdVerifyResp");
-        Protocol prot;
-        if(i == 0)
-            prot = new Protocol(abyte0, 0);
-        else
-            prot = new Protocol("MO_O".getBytes(), 3, abyte0.length, abyte0);
-        i = byteArrayToInt(prot.getContent(), 0, 2);
-        AppLog.i(TAG, (new StringBuilder("--->Video Resp:")).append(i).toString());
 
         try
         {
             AppLog.d(TAG, "--->enableVideo to off");
-            wificar.enableVideo(false);
+            wificar.enableVideo(false, false);
         }
         // Misplaced declaration of an exception variable
         catch(IOException e)
@@ -726,7 +631,7 @@ _L5:
     public static void parseMediaCommand(WifiCar wificar, byte[] buf, int i)
         throws IOException
     {
-        int k = findstr(buf, "MO_V");
+        int k = findstr(buf, i, "MO_V");
 
         // Yes
         if (k  >= 0) {
@@ -745,8 +650,6 @@ _L5:
                 // Video bytes: call processing routine
                 if ((int)mediaRecvBuf[4] == 1) {
                     //add WIFICAR_MEDIA for server side processing 
-                    wificar.onVideoReceived(arrayCopy2(WIFICAR_MEDIA.getBytes(), 0, WIFICAR_MEDIA.length(), 
-                                                mediaRecvBuf, 36, mediaRecvBuf.length - 36));
                     wificar.refreshView(arrayCopy(mediaRecvBuf, 36, mediaRecvBuf.length - 36));
                 // Audio bytes: call processing routine
                 } else{
@@ -778,20 +681,12 @@ _L5:
         }
     }
 
-public static void parseMediaCommandRaw(WifiCar wificar, byte[] buf, int i)
-        throws IOException
-    {
-        //TODO: make a copy
-        byte[] tmp = arrayCopy(buf, 0, i);
-        wificar.onVideoReceived(tmp);
-   
-    }
-
-    private static int findstr(byte[] buf, String str) {
-        if (str.length() == 4) {
+    private static int findstr(byte[] buf, int bufLen, String str) {
+        int strLen = str.length();
+        if (strLen == 4) {
             byte[] str2byte = str.getBytes();
             int i;
-            int len = buf.length;
+            int len = bufLen;
             for (i = 0; i < len -3; i++) {
                 if (buf[i] == str2byte[0] && buf[i+1] == str2byte[1]
                     && buf[i+2] == str2byte[2] && buf[i+3] == str2byte[3]) {
@@ -856,9 +751,9 @@ public static void parseMediaCommandRaw(WifiCar wificar, byte[] buf, int i)
                     String a = new String(tmp);
                     a = a.substring(1);
                     if (a.equals("ON")) {
-                        wificar.enableVideo(true);
+                        wificar.enableVideo(true, false);
                     } else {
-                        wificar.enableVideo(false);
+                        wificar.enableVideo(false, false);
                     }
                     }
                     break;
