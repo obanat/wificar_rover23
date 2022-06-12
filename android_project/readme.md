@@ -11,7 +11,7 @@ app支持2.0和3.0的rover，主要差别除了信令上略微差异，最大的
 
 关联后的MediaCodec仅需要从外部拿到码流，就可以源源不断的往指定的屏幕区域绘制图像。
 
-为此，新增了H264SurfaceView.java，与2.0版本的MjpegView.java并列（界面上加了一个按钮来实现切换），里面封装了一个h264格式的MediaCodec（对应mimetype为video/avc），从创建好的receiverMediaSocket中获取码流数据，并送入解码器。
+基于上述分析，新版的rover app放弃了用ndk编译开源ffmpeg库，再用jni调用native开源库的方式。切换到Android原生的MediaCodec解码上，减少外部依赖。为此，新增了H264SurfaceView.java，与2.0版本的MjpegView.java并列（界面上加了一个按钮来实现切换），里面调用了h264格式的MediaCodec（对应mimetype为video/avc），从创建好的receiverMediaSocket中获取码流数据，并送入解码器，这些，都是Android媒体框架的功劳。
 
 其代码流程为CommandEncoder.java（parseMediaCommandV3） -》WifiCar.java（refreshH264View）-》H264SurfaceView.java（decodeOneFrame）-》MediaCodec（dequeueOutputBuffer），然后就进入Android媒体框架中。
 
