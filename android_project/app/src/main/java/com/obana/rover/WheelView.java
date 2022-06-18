@@ -28,7 +28,7 @@ public class WheelView extends View implements View.OnTouchListener{
     float scale;
 
     private boolean isInit;
-
+    private boolean mNeedRotate;
     private final double PI4 = Math.PI / 4;
 
     public WheelView(Context context) {
@@ -46,6 +46,7 @@ public class WheelView extends View implements View.OnTouchListener{
         mContext = context;
         scale = context.getResources().getDisplayMetrics().density ;
         this.setBackgroundColor(Color.TRANSPARENT);
+        mNeedRotate = attrs.getAttributeBooleanValue(null, "need_ratate",false);
         big_bg = attrs.getAttributeResourceValue(null, "big_circle_src",0);
         small_bg = attrs.getAttributeResourceValue(null, "small_circle_src", 0);
         initWheelView();
@@ -58,6 +59,7 @@ public class WheelView extends View implements View.OnTouchListener{
         mContext = context;
         scale = context.getResources().getDisplayMetrics().density ;
         this.setBackgroundColor(Color.TRANSPARENT);
+        mNeedRotate = attrs.getAttributeBooleanValue(null, "need_ratate",false);
         big_bg = attrs.getAttributeResourceValue(null, "big_circle_src",0);
         small_bg = attrs.getAttributeResourceValue(null, "small_circle_src", 0);
         initWheelView();
@@ -172,19 +174,25 @@ public class WheelView extends View implements View.OnTouchListener{
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if(isInit){
+        if (isInit) {
             getWheelGravity();
             isInit = false;
         }
-        Matrix matrix = new Matrix(); 
+        if (mNeedRotate) {
+            Matrix matrix = new Matrix();
 
-        matrix.postRotate(this.lastAngle, (float) bigcircle_radius, (float) bigcircle_radius);
-        matrix.postTranslate((float) centerX-bigcircle_radius, (float) centerY-bigcircle_radius);  
+            matrix.postRotate(this.lastAngle, (float) bigcircle_radius, (float) bigcircle_radius);
+            matrix.postTranslate((float) centerX - bigcircle_radius, (float) centerY - bigcircle_radius);
 
-        //new add feature: add direction indication
-        //Log.e("WHEELVIEW","move, centerX:" + centerX+ ":" + centerY + ":" + bigcircle_radius);
-        canvas.drawBitmap(bigCircle, matrix, bigCirclePaint);
-        canvas.drawBitmap(smallCircle, moveCenterX - smallcircle_radius, moveCenterY - smallcircle_radius, smallCirclePaint);
+            //new add feature: add direction indication
+            //Log.e("WHEELVIEW","move, centerX:" + centerX+ ":" + centerY + ":" + bigcircle_radius);
+            canvas.drawBitmap(bigCircle, matrix, bigCirclePaint);
+            canvas.drawBitmap(smallCircle, moveCenterX - smallcircle_radius, moveCenterY - smallcircle_radius, smallCirclePaint);
+
+        } else {
+            canvas.drawBitmap(bigCircle, centerX-bigcircle_radius, centerY-bigcircle_radius, bigCirclePaint);
+            canvas.drawBitmap(smallCircle, moveCenterX - smallcircle_radius, moveCenterY - smallcircle_radius, smallCirclePaint);
+        }
     }
 
     public int dip2px(float dipValue)
