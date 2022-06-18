@@ -30,7 +30,7 @@
             <com.obana.rover.WheelView
                 android:id="@+id/camConntrolView"
                 big_circle_src="@drawable/cam_ctl_big"
-                need_ratate="false"
+                need_rotate="false"
                 small_circle_src="@drawable/cam_ctl_small"
                 android:layout_width="100pt"
                 android:layout_height="100pt"
@@ -48,7 +48,7 @@
             <com.obana.rover.WheelView
                 android:id="@+id/conntrolView"
                 big_circle_src="@drawable/bigser"
-                need_ratate="true"
+                need_rotate="true"
                 small_circle_src="@drawable/smile"
                 android:layout_width="match_parent"
                 android:layout_height="450dp" />

@@ -58,10 +58,10 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     public MjpegView mJpegView;
     public H264SurfaceView mH264View;
     private ImageButton mJpegButton;
-    private boolean mJpegStart;
+    private int mJpegStart = 0;
     private Drawable buttonJpegStart;
     private Drawable buttonJpegStop;
-
+    private Drawable buttonCameraSecond;
 
     protected void onCreate(Bundle paramBundle) {
         super.onCreate(paramBundle);
@@ -80,9 +80,10 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         //button to enable/disable jpeg view
         mJpegButton = findViewById(R.id.startJpegButton);
         mJpegButton.setOnClickListener(buttonJpegClickListener);
-        mJpegStart = false;
+        mJpegStart = 0;
         buttonJpegStart = getResources().getDrawable(R.drawable.sym_light);
         buttonJpegStop = getResources().getDrawable(R.drawable.sym_light_off);
+        buttonCameraSecond = getResources().getDrawable(R.drawable.sym_light_2);
 
         this.wifiCar = new WifiCar(this);
         this.handler = new Handler() {
@@ -291,7 +292,19 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         public void run() {
             AppLog.i(TAG, "videoEnable:" + mJpegStart);
             try {
-                WificarMain.this.wifiCar.enableVideo(mJpegStart, true);
+                switch (mJpegStart) {
+                    case 0 :
+                        WificarMain.this.wifiCar.enableVideo(false, true);
+                        break;
+                    case 1:
+                        WificarMain.this.wifiCar.enableVideo(true, true);
+                        break;
+                    case 2:
+                        wifiCar.switchCamera(true);
+                        break;
+                    default:
+                        break;
+                }
             } catch (IOException iOException) {
                 iOException.printStackTrace();
             }
@@ -357,7 +370,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                 if (wifiCar.isVersion20()) {
                     sendCamMoveCommand20(status, angle, distance);
                 } else {
-                    sendCamMoveCommand30(status, angle, distance);
+                    sendCameraRotateStop();
                 }
             }
         }
@@ -381,9 +394,22 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
 
         if (status == 300) {
             //move finish
-            if (mCameraControl%2 == 0)  mCameraControl++;//motor stop
+
         }
 
+        (new Thread(CamMovingTask)).start();
+    }
+
+    void sendCameraRotateStop() {//only for v3
+        if (mCameraControl == 0) {
+            mCameraControl = 3;//motor stop
+        } else if (mCameraControl == 2) {
+            mCameraControl = 1;
+        } else if (mCameraControl == 4) {
+            mCameraControl = 7;
+        } else if (mCameraControl == 6) {
+            mCameraControl = 5;
+        }
         (new Thread(CamMovingTask)).start();
     }
 
@@ -551,16 +577,45 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     };
     private OnClickListener buttonJpegClickListener = new OnClickListener() {
         public void onClick(View arg0) {
-            if (mJpegStart) {
-                mJpegStart = false;
-                mJpegView.stopPlayback();
-                mJpegButton.setImageDrawable(buttonJpegStop);
-                mJpegButton.invalidateDrawable(buttonJpegStop);
-            } else {
-                mJpegStart = true;
-                mJpegView.startPlayback();
-                mJpegButton.setImageDrawable(buttonJpegStart);
-                mJpegButton.invalidateDrawable(buttonJpegStart);
+            if (mJpegStart == 2) {
+
+                if (wifiCar.isVersion20()) {
+                    mJpegStart = 0;
+                    mJpegView.stopPlayback();
+                    mJpegButton.setImageDrawable(buttonJpegStop);
+                    mJpegButton.invalidateDrawable(buttonJpegStop);
+                } else {
+                    mJpegStart = 0;
+                    mH264View.stop();
+                    mJpegButton.setImageDrawable(buttonJpegStop);
+                    mJpegButton.invalidateDrawable(buttonJpegStop);
+                }
+            } else if (mJpegStart == 0){
+
+                if (wifiCar.isVersion20()) {
+                    mJpegStart = 1;
+                    mJpegView.startPlayback();
+                    mJpegButton.setImageDrawable(buttonJpegStart);
+                    mJpegButton.invalidateDrawable(buttonJpegStart);
+                } else {
+                    mJpegStart = 1;
+                    mH264View.initMediaCodec();
+                    mJpegButton.setImageDrawable(buttonJpegStart);
+                    mJpegButton.invalidateDrawable(buttonJpegStart);
+                }
+
+            } else if (mJpegStart == 1) {
+                if (wifiCar.isVersion20()) {
+                    mJpegStart = 0;
+                    mJpegView.stopPlayback();
+                    mJpegButton.setImageDrawable(buttonJpegStop);
+                    mJpegButton.invalidateDrawable(buttonJpegStop);
+                } else {
+                    //switch to second camera
+                    mJpegStart = 2;
+                    mJpegButton.setImageDrawable(buttonCameraSecond);
+                    mJpegButton.invalidateDrawable(buttonCameraSecond);
+                }
             }
             (new Thread(videoEnableThread)).start();
         }

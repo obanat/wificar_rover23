@@ -298,6 +298,12 @@ public class WifiCar
         return true;
     }
 
+    public void switchCamera(boolean isSecondCamera) throws IOException {
+        byte [] abyte0 = CommandEncoder.cmdCamSwitchReq(isSecondCamera);
+        dataOutputStream.write(abyte0);
+        dataOutputStream.flush();
+    }
+
     public boolean enableAudio()
         throws IOException
     {
@@ -348,7 +354,7 @@ public class WifiCar
         if (!bwificarConnected) return false;
 
         try {
-            abyte0 = CommandEncoder.cmdCameraControlReq(i);
+            abyte0 = CommandEncoder.cmdCameraControlReqV3(i);
             AppLog.d(TAG, (new StringBuilder("cmdCameraControlReq(14):")).append(i).toString());
 
             dataOutputStream.write(abyte0);

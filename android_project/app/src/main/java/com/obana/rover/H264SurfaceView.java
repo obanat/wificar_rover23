@@ -49,7 +49,7 @@ public class H264SurfaceView extends SurfaceView implements SurfaceHolder.Callba
         initial();
     }
 
-    private void initMediaCodec() {
+    public void initMediaCodec() {
         if (mCodecState > 0) return;
 
         MediaFormat mediaFormat = MediaFormat.createVideoFormat("video/avc", Video_WandH[0], Video_WandH[1]);
@@ -208,6 +208,13 @@ public class H264SurfaceView extends SurfaceView implements SurfaceHolder.Callba
         if (mCodec != null) {
             mCodec.release();
             mCodec = null;
+        }
+    }
+
+    public void stop() {
+        if (mCodec != null) {
+            mCodec.stop();
+            mCodecState = 0;
         }
     }
 }

@@ -35,6 +35,7 @@ public class WheelView extends View implements View.OnTouchListener{
         super(context);
         isInit = true;
         mContext = context;
+        mNeedRotate = false;
         scale = context.getResources().getDisplayMetrics().density ;
         this.setBackgroundColor(Color.TRANSPARENT);
         initWheelView();
@@ -46,7 +47,7 @@ public class WheelView extends View implements View.OnTouchListener{
         mContext = context;
         scale = context.getResources().getDisplayMetrics().density ;
         this.setBackgroundColor(Color.TRANSPARENT);
-        mNeedRotate = attrs.getAttributeBooleanValue(null, "need_ratate",false);
+        mNeedRotate = attrs.getAttributeBooleanValue(null, "need_rotate",false);
         big_bg = attrs.getAttributeResourceValue(null, "big_circle_src",0);
         small_bg = attrs.getAttributeResourceValue(null, "small_circle_src", 0);
         initWheelView();
@@ -59,7 +60,7 @@ public class WheelView extends View implements View.OnTouchListener{
         mContext = context;
         scale = context.getResources().getDisplayMetrics().density ;
         this.setBackgroundColor(Color.TRANSPARENT);
-        mNeedRotate = attrs.getAttributeBooleanValue(null, "need_ratate",false);
+        mNeedRotate = attrs.getAttributeBooleanValue(null, "need_rotate",false);
         big_bg = attrs.getAttributeResourceValue(null, "big_circle_src",0);
         small_bg = attrs.getAttributeResourceValue(null, "small_circle_src", 0);
         initWheelView();

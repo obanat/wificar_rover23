@@ -20,6 +20,7 @@ public class CommandEncoder
     public static final int AUDIO_START_REQ = 8;
     public static final int AUDIO_START_RESP = 9;
     public static final int DECODER_CONTROL_REQ = 14;
+    public static final int CAMERA_CONTROL_REQ_V3 = 14;
     public static final int DEVICE_CONTROL_REQ = 250;
     public static final int FETCH_BATTERY_POWER_REQ = 251;
     public static final int FETCH_BATTERY_POWER_RESP = 252;
@@ -225,6 +226,12 @@ public class CommandEncoder
         return (new Protocol("MO_O".getBytes(), 14, 1, bytebuffer.array())).output();
     }
 
+    public static byte[] cmdCameraControlReqV3(int i) throws IOException {
+        ByteBuffer bytebuffer = ByteBuffer.allocate(1);
+        bytebuffer.put(int8ToByteArray(i));
+        return (new Protocol("MO_O".getBytes(), CAMERA_CONTROL_REQ_V3, 1, bytebuffer.array())).output();
+    }
+
     public static byte[] cmdDeviceControlReq(int i, int j)
         throws IOException
     {
@@ -234,6 +241,12 @@ public class CommandEncoder
         return (new Protocol("MO_O".getBytes(), 250, 2, bytebuffer.array())).output();
     }
 
+    public static byte[] cmdCamSwitchReq(boolean isSecondCamera) throws IOException {
+        ByteBuffer bytebuffer = ByteBuffer.allocate(2);
+        bytebuffer.put(int8ToByteArray(6));
+        bytebuffer.put(int8ToByteArray(isSecondCamera?1:2));
+        return (new Protocol("MO_O".getBytes(), 19, 2, bytebuffer.array())).output();
+    }
     public static byte[] cmdFetchBatteryPowerReq()
         throws IOException
     {
