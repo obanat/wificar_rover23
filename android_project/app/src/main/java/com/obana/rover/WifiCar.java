@@ -343,7 +343,22 @@ public class WifiCar
         return true;
     }
 
+    public boolean camMove(int i) throws IOException {
+        byte abyte0[];
+        if (!bwificarConnected) return false;
 
+        try {
+            abyte0 = CommandEncoder.cmdCameraControlReq(i);
+            AppLog.d(TAG, (new StringBuilder("cmdCameraControlReq(14):")).append(i).toString());
+
+            dataOutputStream.write(abyte0);
+            dataOutputStream.flush();
+        } catch(Exception ioexception) {
+            AppLog.i(TAG, "can not move camera!");
+        }
+
+        return true;
+    }
 
     public void connectMediaReceiver(int i)throws IOException{
         if (carStateMode == CAR_MODE_CLOUD/*cloud mode use combined socket*/) {
