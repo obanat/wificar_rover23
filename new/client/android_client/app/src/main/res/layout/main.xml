@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".WificarMain">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        tools:layout_editor_absoluteX="1dp"
+        tools:layout_editor_absoluteY="1dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="3">
+
+            <com.obana.rover.MjpegView
+                android:id="@+id/jpegView"
+                android:layout_width="match_parent"
+                android:layout_height="500dp" />
+
+            <com.obana.rover.H264SurfaceView
+                android:id="@+id/h264View"
+                android:layout_width="match_parent"
+                android:layout_height="500dp" />
+
+            <com.obana.rover.WheelView
+                android:id="@+id/camConntrolView"
+                big_circle_src="@drawable/cam_ctl_big"
+                need_rotate="false"
+                small_circle_src="@drawable/cam_ctl_small"
+                android:layout_width="100pt"
+                android:layout_height="100pt"
+                android:layout_alignParentRight="true"
+                android:layout_alignParentBottom="true"
+                android:layout_centerInParent="false" />
+        </RelativeLayout>
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="3"
+            android:background="@drawable/main_background">
+
+            <com.obana.rover.WheelView
+                android:id="@+id/conntrolView"
+                big_circle_src="@drawable/bigser"
+                need_rotate="true"
+                small_circle_src="@drawable/smile"
+                android:layout_width="match_parent"
+                android:layout_height="450dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_marginLeft="10dp"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/textView_V1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Version:" />
+
+                <Switch
+                    android:id="@+id/versionSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="#00000000"
+                    android:textOff="2"
+                    android:textOn="3" />
+
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/startJpegButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentRight="true"
+                android:layout_marginRight="20dp"
+                android:background="#00000000"
+                android:src="@drawable/sym_light_off" />
+
+            <ImageButton
+                android:id="@+id/startWifiButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentBottom="true"
+                android:layout_marginLeft="-1dp"
+                android:src="@drawable/wifi_setting" />
+
+        </RelativeLayout>
+
+    </LinearLayout>
+</RelativeLayout>
