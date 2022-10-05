@@ -24,4 +24,5 @@ proxy:
 
 client：
 小车的控制端，Android app，界面与老版本的app类似，增加了远程连接状态的显示，新版本不支持本地控制，仅支持远程遥控。
+upnp部分使用了开源的upnplibmobile
 
