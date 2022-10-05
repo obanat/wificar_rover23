@@ -18,6 +18,7 @@ import android.view.View;
 import android.view.Window;
 import android.widget.Chronometer;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.Switch;
 import android.widget.CompoundButton;
@@ -34,6 +35,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     public static final String TAG = "Wificar_Activity";
     public static final int MESSAGE_CONNECT_TO_CAR_FAIL = 1002;
     public static final int MESSAGE_MAKE_TOAST = 6001;
+    public static final int MESSAGE_DEBUG = 6002;
 
     public static final boolean SHOW_DEBUG_MESSAGE = true;
     public static final String BUNDLE_KEY_TOAST_MSG = "Tmessage";
@@ -62,6 +64,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     private Drawable buttonJpegStart;
     private Drawable buttonJpegStop;
     private Drawable buttonCameraSecond;
+    private TextView mDebugText;
 
     protected void onCreate(Bundle paramBundle) {
         super.onCreate(paramBundle);
@@ -76,7 +79,9 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         mJpegView = findViewById(R.id.jpegView);
         mH264View = findViewById(R.id.h264View);
         findViewById(R.id.startWifiButton).setOnClickListener(buttonWifiClickListener);
-        ;
+
+        mDebugText = findViewById(R.id.textView_debug);
+
         //button to enable/disable jpeg view
         mJpegButton = findViewById(R.id.startJpegButton);
         mJpegButton.setOnClickListener(buttonJpegClickListener);
@@ -156,7 +161,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                 boolean result = false;
                 try {
                     result = WificarMain.this.wifiCar.initCmdConnection();
-                } catch (IOException e) {
+                } catch (Exception e) {
 
                 }
                 if (result) {
@@ -250,6 +255,13 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                 }
                 handled = true;
                 break;
+            case MESSAGE_DEBUG:
+                if (SHOW_DEBUG_MESSAGE) {
+                    String msg = param1Message.getData().getString(BUNDLE_KEY_TOAST_MSG);
+                    mDebugText.setText(msg);
+                }
+                handled = true;
+                break;
             default:
                 return false;
         }
@@ -264,6 +276,16 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         msg.setData(bundle);
         handler.sendMessage(msg);
     }
+
+    public void sendDebugMessage(String str) {
+        Bundle bundle = new Bundle();
+        bundle.putString(BUNDLE_KEY_TOAST_MSG, str);
+
+        Message msg = handler.obtainMessage(MESSAGE_DEBUG);
+        msg.setData(bundle);
+        handler.sendMessage(msg);
+    }
+
 
     private Thread LMovingTask2s = new Thread() {
         public void run() {
