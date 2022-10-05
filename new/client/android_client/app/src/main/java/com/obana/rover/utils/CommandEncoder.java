@@ -212,11 +212,13 @@ public class CommandEncoder
     }
 
     //new add cmd, from client to cloud, register cmd
-    public static byte[] cmdClientRegReq(int port) throws IOException
+    public static byte[] cmdClientRegReq(String devId, int ipv4, int port) throws IOException
     {
-        ByteBuffer bytebuffer = ByteBuffer.allocate(4);
+        ByteBuffer bytebuffer = ByteBuffer.allocate(24);//total len:24=16+4+4
+        bytebuffer.put(stringToByteArray(devId, 16));
+        bytebuffer.put(int32ToByteArray(ipv4));
         bytebuffer.put(int32ToByteArray(port));
-        return (new Protocol("MO_C".getBytes(), 32, 4, bytebuffer.array())).output();
+        return (new Protocol("MO_C".getBytes(), 32/*client reg req*/, 24, bytebuffer.array())).output();
     }
 
     public static byte[] cmdDataLoginReq(int i)
@@ -445,6 +447,17 @@ public class CommandEncoder
         });
     }
 
+    public static byte[] stringToByteArray(String s, int maxLen)
+    {
+        int sLen = s.length();
+        int len = sLen < maxLen ? sLen : maxLen;
+        byte[] ret = new byte[len];
+        for (int i = 0; i < len ; i++) {
+            ret[i] = (byte)s.charAt(i);
+        }
+        return ret;
+    }
+
     public static void parseAudioData(WifiCar wificar, byte abyte0[])
     {
         //wificar.enableAudioFlag();
@@ -633,6 +646,11 @@ public class CommandEncoder
         }
     }
 
+    private static void parseCientRegResp(WifiCar wificar, byte[] abyte0, int i) {
+        int rest = byteArrayToInt(abyte0, 0, 4);
+        wificar.processClientRegResult(rest);
+    }
+
     private static int findstr(byte[] buf, int bufLen, String str) {
         int strLen = str.length();
         if (strLen == 4) {
@@ -674,43 +692,30 @@ public class CommandEncoder
         return ret;
     }
 
-    private static final String CLOUD_CMD_PREFIX = "MO_T";
-    public static void parseCloudCommand(WifiCar wificar, byte[] buf, int len)
+    private static final String CLOUD_CMD_PREFIX = "MO_U";
+    public static int parseCloudCommand(WifiCar wificar, byte[] buf, int len)
         throws IOException
     {
-        //TODO: make a copy
-        String cmd = new String(buf);
-        AppLog.i(TAG, "parseCloudCommand:receive cloud socket data:" + cmd);
-        if (cmd.startsWith(CLOUD_CMD_PREFIX)) {
-            byte[] tmp = arrayCopy(buf, 4, len -4);
-            switch (tmp[0]) {
-                case 'M' :{
-                    AppLog.i(TAG, "parseCloudCommand:M");
-                    String a = new String(tmp);
-                    a = a.substring(1);
-                    String [] values = a.split("_");
-                    if (values.length == 2) {
-                        int left = Integer.parseInt(values[0]);
-                        int right = Integer.parseInt(values[1]);
-                        AppLog.i(TAG, "parseCloudCommand:move M:" + left + " :" + right);
-                        wificar.move(0, 10);
-                    }
-                    }
-                    break;
-                case 'C' :{
-                    AppLog.i(TAG, "parseCloudCommand:C");
-                    String a = new String(tmp);
-                    a = a.substring(1);
-                    if (a.equals("ON")) {
-                        //wificar.enableVideo(true, false);
-                    } else {
-                        //wificar.enableVideo(false, false);
-                    }
-                    }
-                    break;
-                default:
-                    break;
-            }
+
+        int k = findstr(buf, len, "MO_U");//means data from cloud
+        if (k < 0) return -1;
+
+        if(len < 23) return -1;
+
+        int op = ByteUtility.byteArrayToInt(buf, 4, 2);
+        int dataLen = ByteUtility.byteArrayToInt(buf, 15, 4);
+        AppLog.d(TAG, "--->receive [" + len + "] bytes data op:" + op + " len:" + len);
+        //if(abyte0.length >= i + 23) return bytearraybuffer;
+
+        Protocol protocol = new Protocol(buf, 0);
+        switch(protocol.getOp())
+        {
+            case 33: // registry response
+                parseCientRegResp(wificar, protocol.getContent(), 1);
+                return 1;
+            default :
+                return -1;
         }
+        //return bytearraybuffer;
     }
 }
