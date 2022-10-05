@@ -46,7 +46,7 @@ public class CarProxy
     Socket carCmdSocket;
     Socket carMediaSocket;
 
-    Socket cloudCmdSocket;
+    Socket cloudSocket;
 
     Socket clientCmdSocket;
     Socket clientMediaSocket;
@@ -60,6 +60,9 @@ public class CarProxy
 
     DataInputStream mediaInputStreamUplink = null;//belong to carMediaSocket
     DataOutputStream mediaOutputStreamUplink = null;//belong to clientMediaSocket
+
+    DataInputStream cloudInputStream = null;//belong to carCmdSocket
+    DataOutputStream cloudOutputStream = null;//belong to clientCmdSocket
 
     private CarProxy instance;
 
@@ -89,6 +92,8 @@ public class CarProxy
     private byte[] cmdUplinkBuffer;
     private byte[] cmdDownlinkBuffer;
     private byte[] mediaUplinkBuffer;
+    private byte[] cloudBuffer;
+
     //private int cmdUplinkBufferLen = 0;
     private byte[] bufferedDownlinkCmd = null;
 
@@ -100,6 +105,10 @@ public class CarProxy
     Thread thread_cmd_uplink = null;
     Thread thread_media_uplink = null;
 
+    int clientIp = 0;
+    int clientPort = 0;
+    Network cachedNetwork = null;
+
     public CarProxy(Activity activity)
     {
         instance = this;
@@ -108,6 +117,8 @@ public class CarProxy
         cmdUplinkBuffer = new byte[CMD_BUF_LEN];
         cmdDownlinkBuffer = new byte[CMD_BUF_LEN];
         mediaUplinkBuffer = new byte[MEDIA_BUF_LEN];
+
+        cloudBuffer = new byte[CMD_BUF_LEN];
         AppLog.d(TAG, "new CarProxy created successfully!");
     }
 
@@ -270,6 +281,44 @@ public class CarProxy
         }
     };
 
+    //cloud runnable
+    Runnable runnable_cloud = new Runnable() {
+        //thread of cloud socket
+        public void run()//this is main receive loop
+        {
+            int i;
+            byte[] tmp = null;
+            do {
+                try {
+                    if (cloudInputStream == null) {
+                        AppLog.e(TAG, "--->runnable_cloud input stream error, just exit thread");
+                        break;
+                    }
+                    i = cloudInputStream.available();//read from cloud
+
+                    if(i <= 0 || i >= CMD_BUF_LEN) {
+                        //AppLog.i(TAG, "--->read dataInputStream loop");
+                        continue;
+                    }
+                    if (DBG) AppLog.i(TAG, "cloud Thread ---> read data len:" + i);
+                    cmdInputStreamDownlink.read(cloudBuffer, 0, i);
+                } catch(Exception ioexception) {
+                    AppLog.e(TAG, "cloud thread ioexception!, just exit thread!");
+                    break;
+                }
+
+                try {
+                    tmp = arrayCopy(cloudBuffer, 0, i);
+                    parseCloudCommand(tmp, i);
+                } catch(IOException ioexception) {
+                    AppLog.e(TAG, "parseCloudCommand ioexception!");
+                }
+            } while(true);
+        }
+    };
+
+
+
     public boolean connectToCarCmd() throws IOException
     {
         if (b_connected_car_cmd) {
@@ -361,26 +410,35 @@ public class CarProxy
             return true;
         }
 
-        cloudCmdSocket = SocketFactory.getDefault().createSocket();
-        cloudCmdSocket.setSendBufferSize(CMD_BUF_LEN);//important, it make sure jpg data
+        cloudSocket = SocketFactory.getDefault().createSocket();
+        cloudSocket.setSendBufferSize(CMD_BUF_LEN);//important, it make sure jpg data
 
         AppLog.i(TAG, "--->cloud cmd socket connecting .....");
+        if (network ==null) network = cachedNetwork;
         if (network ==null) return false;
+
+        cachedNetwork = network;
 
         InetAddress addr = network.getByName(CLOUD_HOST_NAME);
         AppLog.i(TAG, "--->get cloud dns addr:" + addr.getHostAddress());
 
-        network.bindSocket(cloudCmdSocket);
+        network.bindSocket(cloudSocket);
         InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, CLOUD_PORT);
 
-        cloudCmdSocket.connect(inetSocketAddress, 5000);
+        cloudSocket.connect(inetSocketAddress, 5000);
         AppLog.i(TAG, "Cloud Cmd Socket ---> connected:" + inetSocketAddress);
-        if(!cloudCmdSocket.isConnected()){
+        if(!cloudSocket.isConnected()){
             AppLog.i(TAG, "--->cloud socket init failed!");
             throw new IOException();
         }
+        cloudInputStream = new DataInputStream(cloudSocket.getInputStream());
+        cloudOutputStream = new DataOutputStream(cloudSocket.getOutputStream());
+
         b_connected_cloud_cmd = true;
 
+        new Thread(runnable_cloud).start();//start recv loop
+
+        sendCloudRegReq();//reg to cloud
         return b_connected_cloud_cmd;
     }
 
@@ -401,27 +459,44 @@ public class CarProxy
         AppLog.i(TAG, "--->client p2p cmd&media socket connecting .....");
         if (network ==null) return false;
 
-        String CLIENT_HOST_NAME = "obana.f3322.org";
-        int CLIENT_HOST_PORT = 28001;
-        InetAddress addr = network.getByName(CLIENT_HOST_NAME);
-
         network.bindSocket(clientCmdSocket);
-        InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, CLIENT_HOST_PORT);
+        InetSocketAddress inetSocketAddress;
 
+        if (clientIp>0 && clientPort>0) {
+            inetSocketAddress = new InetSocketAddress(int2ip(clientIp), clientPort);
+        } else {
+            String CLIENT_HOST_NAME = "obana.f3322.org";
+            int CLIENT_HOST_PORT = 28001;
+            InetAddress addr = network.getByName(CLIENT_HOST_NAME);
+            inetSocketAddress = new InetSocketAddress(addr, CLIENT_HOST_PORT);
+        }
+        AppLog.i(TAG, "Client Cmd Socket connecting ...." + inetSocketAddress);
         clientCmdSocket.connect(inetSocketAddress, 5000);
         AppLog.i(TAG, "Client Cmd Socket ---> connected:" + inetSocketAddress);
+
         if(!clientCmdSocket.isConnected()){
             AppLog.i(TAG, "--->client cmd socket connect failed!");
             throw new IOException();
         }
 
         network.bindSocket(clientMediaSocket);
-        inetSocketAddress = new InetSocketAddress(addr, CLIENT_HOST_PORT+1);
 
+        if (clientIp>0 && clientPort>0) {
+            inetSocketAddress = new InetSocketAddress(int2ip(clientIp), clientPort+1);
+        } else {
+            String CLIENT_HOST_NAME = "obana.f3322.org";
+            int CLIENT_HOST_PORT = 28001;
+            InetAddress addr = network.getByName(CLIENT_HOST_NAME);
+            inetSocketAddress = new InetSocketAddress(addr, CLIENT_HOST_PORT+1);
+        }
+
+        AppLog.i(TAG, "Client Media Socket connecting ...." + inetSocketAddress);
         clientMediaSocket.connect(inetSocketAddress, 5000);
         AppLog.i(TAG, "Client Meida Socket ---> connected:" + inetSocketAddress);
+
         if(!clientMediaSocket.isConnected()){
             AppLog.i(TAG, "--->client media socket connect failed!");
+            b_connected_client = false;
             throw new IOException();
         }
 
@@ -455,9 +530,9 @@ public class CarProxy
 
     public int isCloudSocketConnected() {
         try {
-          if (cloudCmdSocket == null)
+          if (cloudSocket == null)
             return 0; 
-          boolean bool = cloudCmdSocket.isConnected();
+          boolean bool = cloudSocket.isConnected();
             return 1;
         } catch (Exception exception) {
           exception.printStackTrace();
@@ -639,5 +714,63 @@ public class CarProxy
                 return 1;
 
         }
+    }
+
+    void sendCloudRegReq() {
+        byte abyte0[] = null;
+
+        try {
+            if (cloudSocket!= null && cloudSocket.isConnected()
+                && cloudOutputStream != null) {
+                abyte0 = CommandEncoder.cmdCloudRegReq();
+                cloudOutputStream.write(abyte0);
+                cloudOutputStream.flush();
+            }
+        } catch (IOException e){
+
+        }
+    }
+    int parseCloudCommand(byte abyte0[], int i) throws IOException {
+
+        int k = findstr(abyte0, "MO_U");//means cloud
+        if (k < 0) return -1;
+
+        if(i <= 23) return -1;
+
+        int op = ByteUtility.byteArrayToInt(abyte0, 4, 2);
+        int len = ByteUtility.byteArrayToInt(abyte0, 15, 4);
+        AppLog.i(TAG, "--->receive [" + i + "] bytes Cloud data op:" + op + " len:" + len);
+        byte[] content;
+        switch(op)
+        {
+            case 33: //cloud reg response
+                content = new byte[len];
+                System.arraycopy(abyte0, 23, content, 0, len);
+                parseCloudRegResp(content);
+                return 1;
+            default:
+                break;
+        }
+        return -1;
+    }
+    void parseCloudRegResp(byte abyte0[]) throws IOException {
+        //get client ip & port
+        if (abyte0.length == 8) {
+            clientIp = ByteUtility.byteArrayToInt(abyte0, 0, 4);
+            clientPort = ByteUtility.byteArrayToInt(abyte0, 4, 4);
+            AppLog.i(TAG, "proxy reg successfully!");
+            AppLog.i(TAG, "client ip:" + int2ip(clientIp) + " port:" + clientPort);
+
+            mainUI.ConnectToClientViaP2P(0);//use main loop to invoke ConnectToCloud
+        }
+    }
+
+    private String int2ip(int ipInt) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(ipInt & 0xFF).append(".");
+        sb.append((ipInt >> 8) & 0xFF).append(".");
+        sb.append((ipInt >> 16) & 0xFF).append(".");
+        sb.append((ipInt >> 24) & 0xFF);
+        return sb.toString();
     }
 }

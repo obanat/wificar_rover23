@@ -212,11 +212,11 @@ public class CommandEncoder
     }
 
     //new add cmd, from client to cloud, register cmd
-    public static byte[] cmdClientRegReq(String devId, int ipv4, int port) throws IOException
+    public static byte[] cmdClientRegReq(String devId, long ipv4, int port) throws IOException
     {
         ByteBuffer bytebuffer = ByteBuffer.allocate(24);//total len:24=16+4+4
         bytebuffer.put(stringToByteArray(devId, 16));
-        bytebuffer.put(int32ToByteArray(ipv4));
+        bytebuffer.put(long4ToByteArray(ipv4));
         bytebuffer.put(int32ToByteArray(port));
         return (new Protocol("MO_C".getBytes(), 32/*client reg req*/, 24, bytebuffer.array())).output();
     }
@@ -447,11 +447,17 @@ public class CommandEncoder
         });
     }
 
+    public static byte[] long4ToByteArray(long l)
+    {
+        return (new byte[] {
+                (byte)(int)(l >> 24 & 255L), (byte)(int)(l >> 16 & 255L), (byte)(int)(l >> 8 & 255L), (byte)(int)(l >> 0 & 255L)
+        });
+    }
     public static byte[] stringToByteArray(String s, int maxLen)
     {
         int sLen = s.length();
         int len = sLen < maxLen ? sLen : maxLen;
-        byte[] ret = new byte[len];
+        byte[] ret = new byte[maxLen];
         for (int i = 0; i < len ; i++) {
             ret[i] = (byte)s.charAt(i);
         }
@@ -704,7 +710,7 @@ public class CommandEncoder
 
         int op = ByteUtility.byteArrayToInt(buf, 4, 2);
         int dataLen = ByteUtility.byteArrayToInt(buf, 15, 4);
-        AppLog.d(TAG, "--->receive [" + len + "] bytes data op:" + op + " len:" + len);
+        AppLog.d(TAG, "--->receive [" + len + "] bytes data from cloud, op:" + op + " len:" + len);
         //if(abyte0.length >= i + 23) return bytearraybuffer;
 
         Protocol protocol = new Protocol(buf, 0);

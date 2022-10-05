@@ -321,6 +321,15 @@ public class CommandEncoder
         return (new Protocol("MO_O".getBytes(), 4, 1, bytebuffer.array())).output();
     }
 
+    //new added
+    public static byte[] cmdCloudRegReq()
+            throws IOException
+    {
+        ByteBuffer bytebuffer = ByteBuffer.allocate(4);
+        bytebuffer.put(int32ToByteArray(1));//just for feature use
+        return (new Protocol("MO_P".getBytes(), 32/*cloud reg req*/, 4, bytebuffer.array())).output();
+    }
+
     /*public static Protocol createTalkData(TalkData talkdata)
         throws IOException
     {

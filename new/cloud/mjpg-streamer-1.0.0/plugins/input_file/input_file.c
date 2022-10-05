@@ -43,9 +43,25 @@
 #define CMD_BUF_SIZE (1024)
 #define LOG_BUF_SIZE (20)
 
+#define ROLE_CLIENT (0x10)
+#define ROLE_PROXY (0x11)
+
+#define OP_REG_REQ (32)
+#define OP_REG_RESP (33)
+
+#define SERVER_PORT (19092)
+
+#define STATE_INIT (0x20)
+#define STATE_CLIENT_CONNECT (0x21)
+#define STATE_CLIENT_REGED (0x22)
+#define STATE_PROXY_REGED (0x23)
+
 /* private functions and variables to this plugin */
 static pthread_t threadWorker;
-static int SERVER_PORT = 19092;//use by server listen
+
+static int clientIp = 0;
+static int clientPort = 0;//use by proxy to make p2p connection
+
 static int downlinkRecvThreadId = -1;
 
 static globals     *pglobal;
@@ -64,7 +80,7 @@ static int plugin_number;
 
 
 static int link_fd = 0;
-static int proxyRegistered = -1;//
+static int mState = 0;//
 static int last_fd = -1;//last connected android clent fd
 
 //support only 2 socket client, one as proxy, one as client
@@ -81,6 +97,7 @@ static char cmdBuf[CMD_BUF_SIZE] = {0};
 int input_cmd(int plugin, int command_id, int group, int value, char* sValue);
 void saveInt2bytes(unsigned char* data, unsigned int value);
 unsigned int bytes2int(char* data);
+unsigned int bytes2short(char* data);
 int arrayCopy(char* dest, int dest_pos, char* src, int src_pos, int len);
 
 /*** plugin interface functions ***/
@@ -124,7 +141,7 @@ int input_run(int id)
     pglobal->in[id].buf = NULL;
 
     DBG("input_run starting >>>>>>>>>>>>>>>>>> id:%d \n", id);
-
+    mState = STATE_INIT;
     //for uplink
     link_fd = socket(AF_INET,SOCK_STREAM, 0);
     int bufSize = CMD_BUF_SIZE;
@@ -220,39 +237,50 @@ void *recv_thread(void *arg)
 {
     
     int clientFd = *((int *)arg);
+    struct sockaddr_in client_socket;
+    socklen_t length = sizeof(client_socket);
     while(!pglobal->stop) {
         int recv_length = read(clientFd, cmdBuf, sizeof(cmdBuf));
         if (recv_length > 0) {
 
-            int op = bytes2int(cmdBuf + 4);
-            int role = bytes2int(cmdBuf + 8);
-            DBG("socket data recved! len:%d, op:%d, role:%d\n", recv_length, op, role);
-            if (recv_length == 12 && op == 100 && role == 0x11) {
-                //register signal from proxy
-                DBG("proxy has inited! \n");
-                proxyRegistered = 1;
-            } else if (recv_length == 12 && op == 100 && role == 0x12) {
+            int op = bytes2short(cmdBuf + 4);
+            int len = bytes2int(cmdBuf + 15);
+            int role = findstr(cmdBuf, recv_length, "MO_C", 4) == 0 ? ROLE_CLIENT : ROLE_PROXY;
+            DBG("socket data recved! len:%d, op:%d, role:%d\n", len, op, role);
+            if (len == 24 && op == OP_REG_REQ && role == ROLE_CLIENT) {
                 //register signal from client
-                DBG("client has inited! \n");
-                struct sockaddr_in client_socket;
-                socklen_t length = sizeof(client_socket);
-                getpeername(clientFd, (struct sockaddr *)&client_socket, (socklen_t*)&length); //sockfd
+                int ipv4 = bytes2int(cmdBuf + 23+16);
+                int port = bytes2int(cmdBuf + 23+16+4);
+                
                 char buf_ip[INET_ADDRSTRLEN];
                 memset(buf_ip, '\0', sizeof(buf_ip));
-                inet_ntop(AF_INET,&client_socket.sin_addr, buf_ip, sizeof(buf_ip));
+                inet_ntop(AF_INET, &ipv4, buf_ip, sizeof(buf_ip));
+                DBG("recv client reg ip:%s, port:%d  \n", buf_ip, port);
+                mState = STATE_CLIENT_CONNECT;
 
-                char buf[32] = {0};
-                buf[0] = 'M';buf[1] = 'O';buf[2] = '_';buf[3] = 'O';
-                saveInt2bytes(buf+4, 101);//op
-                saveInt2bytes(buf+8, 0x13);//role
-                arrayCopy(buf, 12, buf_ip, 0, INET_ADDRSTRLEN);//ip
-                saveInt2bytes(buf+28, client_socket.sin_port);//port
+                getpeername(clientFd, (struct sockaddr *)&client_socket, (socklen_t*)&length); //sockfd
+                if (ipv4 == client_socket.sin_addr.s_addr) {
+                    clientIp = ipv4;
+                    clientPort = client_socket.sin_port;
+                    mState = STATE_CLIENT_REGED;
+                    DBG("client has be registered, ip&port saved, waiting proxy reg.... \n");
+                }
+            } else if (op == OP_REG_REQ && role == ROLE_PROXY) {
+                //register signal from proxy
+                DBG("recv register signal from proxy, mState:%d \n",mState);
 
-                int proxyFd = clientFd == fd1? fd2 : fd1;
-                if(proxyRegistered > 0 ) {
-                    if (send(proxyFd, buf, 32, 0) < 0) {
+                char buf[31] = {0};//total len is 31(23+4+4)
+                buf[0] = 'M';buf[1] = 'O';buf[2] = '_';buf[3] = 'U';//means cloud
+                saveshort2bytes(buf+4, OP_REG_RESP);//op
+                saveInt2bytes(buf+15, 4+4);//length 0f data( ip & port)
+                saveInt2bytes(buf+23, clientIp);//ipv4
+                saveInt2bytes(buf+27, clientPort);//ipv4
+
+                if(mState == STATE_CLIENT_REGED ) {
+                    if (send(clientFd, buf, 31, 0) < 0) {
                         DBG("send OK response to proxy error! \n");
                     }
+                    mState == STATE_PROXY_REGED;
                     DBG("send OK response to proxy successfully, wait next! \n");
                 }
             } else {
@@ -260,7 +288,6 @@ void *recv_thread(void *arg)
         } else {
             //break;
             DBG("client disconnect, waiting.....\n");
-            proxyRegistered = -1;
             break;
         }
     }
@@ -318,6 +345,15 @@ void saveInt2bytes(unsigned char* data, unsigned int value) {
     data[0] = (unsigned char)(value & 0xFF);
 }
 
+void saveshort2bytes(unsigned char* data, unsigned int value) {
+    data[0] = (unsigned char)(value & 0xFF);
+    data[1] = (unsigned char)((value >> 8) & 0xFF);
+}
+
 unsigned int bytes2int(char* data) {
     return (unsigned int)((unsigned char)data[0] | (unsigned char)data[1]<<8 | (unsigned char)data[2]<<16 | (unsigned char)data[3]<<24);
+}
+
+unsigned int bytes2short(char* data) {
+    return (unsigned int)((unsigned char)data[0] | (unsigned char)data[1]<<8 );
 }

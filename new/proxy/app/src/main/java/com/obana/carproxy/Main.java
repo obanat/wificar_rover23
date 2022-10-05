@@ -58,25 +58,25 @@ import android.view.View.OnClickListener;
 
 
 public class Main extends Activity implements View.OnClickListener, View.OnTouchListener{
-  public static final String TAG = "Main_Activity";
-  private static final boolean SHOW_DEBUG_MESSAGE = false;
-  private static final String BUNDLE_KEY_TOAST_MSG = "toast_msg";
+    public static final String TAG = "Main_Activity";
+    private static final boolean SHOW_DEBUG_MESSAGE = false;
+    private static final String BUNDLE_KEY_TOAST_MSG = "toast_msg";
 
-  private static final int MESSAGE_CONNECT_TO_CAR_FAIL = 0x1001;
-  private static final int MESSAGE_MAKE_TOAST = 0x1002;
-  private static final int MESSAGE_THREAD_UPDATE = 0x1003;
-  private static final int MESSAGE_RECONNECT_CAR = 0x1004;
-  
-  private CarProxy mCarProxy = null;
-  private Handler mHandler = null;
+    private static final int MESSAGE_CONNECT_TO_CAR_FAIL = 0x1001;
+    private static final int MESSAGE_MAKE_TOAST = 0x1002;
+    private static final int MESSAGE_THREAD_UPDATE = 0x1003;
+    private static final int MESSAGE_RECONNECT_CAR = 0x1004;
+    private static final int MESSAGE_CONNECT_CLIENT = 0x1005;
+    private CarProxy mCarProxy = null;
+    private Handler mHandler = null;
 
-  private TextView mCarCmdSocketText;
-  private TextView mCloudCmdSocketText;
-  private TextView mCarMediaSocketText;
+    private TextView mCarCmdSocketText;
+    private TextView mCloudCmdSocketText;
+    private TextView mCarMediaSocketText;
 
-  private TextView mCmdUplinkThreadText;
-  private TextView mMediaUplinkThreadText;
-  private TextView mCmdDownlinkThreadText;
+    private TextView mCmdUplinkThreadText;
+    private TextView mMediaUplinkThreadText;
+    private TextView mCmdDownlinkThreadText;
 
   protected void onCreate(Bundle paramBundle) {
     super.onCreate(paramBundle);
@@ -318,6 +318,10 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
         (new Thread(reconnectTask)).start();
         handled = true;
         break;
+      case MESSAGE_CONNECT_CLIENT:
+            (new Thread(connectClientTask)).start();
+            handled = true;
+            break;
       default:
         return false;
     }
@@ -370,4 +374,22 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     magicValue = i;
     mHandler.sendMessage(msg);
   }
+
+  public void ConnectToClientViaP2P(int i) {
+        Message msg = mHandler.obtainMessage(MESSAGE_CONNECT_CLIENT);
+        magicValue = i;
+        mHandler.sendMessage(msg);
+    }
+
+    private Thread connectClientTask = new Thread() {
+        public void run() {
+            AppLog.i(TAG, "connect client Task starting...");
+            try {
+
+                mCarProxy.ConnectToCloud(null);
+            } catch (IOException iOException) {
+                iOException.printStackTrace();
+            }
+        }
+    };
 }

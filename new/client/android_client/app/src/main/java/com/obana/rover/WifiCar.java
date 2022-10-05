@@ -60,7 +60,7 @@ public class WifiCar
     private static final int STATE_CREATE_SERVER    = 103;
     private static final int STATE_CLOUD_REGED      = 104;
     private static final int STATE_PROXY_CONNECTED  = 105;
-
+    private static final int STATE_MEDIA_RECVED     = 106;
     HashMap<Integer, String> stateDebugMsgs = new HashMap<Integer, String>() {
         {   put(STATE_UNKNOW, "STATE_UNKNOW");
             put(STATE_CONNECT_CLOUD, "STATE_CONNECT_CLOUD");
@@ -68,7 +68,8 @@ public class WifiCar
             put(STATE_REG_CLOUD, "STATE_REG_CLOUD");
             put(STATE_CREATE_SERVER, "STATE_CREATE_SERVER");
             put(STATE_CLOUD_REGED, "STATE_CLOUD_REGED");
-            put(STATE_CLOUD_REGED, "STATE_CLOUD_REGED");
+            put(STATE_PROXY_CONNECTED, "STATE_PROXY_CONNECTED");
+            put(STATE_MEDIA_RECVED, "STATE_MEDIA_RECVED");
         }
     };
     private int mState = STATE_UNKNOW;
@@ -79,7 +80,7 @@ public class WifiCar
 
     InputStream cmdInputStream = null;
     OutputStream cmdOutputStream = null;
-    InputStream mediaReceiverInputStream = null;
+    DataInputStream mediaReceiverInputStream = null;
     String cameraId;
 
     private WifiCar instance;
@@ -112,7 +113,7 @@ public class WifiCar
         cameraId = "1100000";//for test,
 
         mState = STATE_UNKNOW;
-        showStateDebugMsg(mState);
+
         keepAliveTimer = new Timer("keep alive");
         instance = null;
    
@@ -132,6 +133,7 @@ public class WifiCar
 
         mainUI = activity;
         carVersion = CAR_VERSION_20;//3.0 by default
+        showStateDebugMsg(mState);
         AppLog.i(TAG, "new WifiCar created successfully!");
     }
 
@@ -200,8 +202,7 @@ public class WifiCar
                             //print proxy cmd socket addr&port
                             final String address = socket.getRemoteSocketAddress().toString();
                             AppLog.i(TAG, "one client cmd connected, address:" + address);
-                            mState = STATE_PROXY_CONNECTED;
-                            showStateDebugMsg(mState);
+
                             new Thread(new Runnable() {
                                 @Override
                                 public void run() {
@@ -248,18 +249,26 @@ public class WifiCar
                             final String address = socket.getRemoteSocketAddress().toString();
                             AppLog.i(TAG, "one client media connected, address:" + address);
 
+                            mState = STATE_PROXY_CONNECTED;
+                            showStateDebugMsg(mState);
+
                             new Thread(new Runnable() {
                                 @Override
                                 public void run() {
                                     try {
-                                        mediaReceiverInputStream = socket.getInputStream();
-
-                                        InputStreamReader isr = new InputStreamReader(mediaReceiverInputStream);
-
+                                        socket.setKeepAlive(true);
+                                        mediaReceiverInputStream = new DataInputStream(socket.getInputStream());
                                         int len;
-                                        while ((len = mediaReceiverInputStream.read(mediaBuffer)) != -1) {
-                                            socket.shutdownInput();
+                                        while ((len = mediaReceiverInputStream.available()) != -1) {
+                                            mediaReceiverInputStream.read(mediaBuffer);
+                                            if (len == 0 || len > MEDIA_BUF_SIZE) {
+                                                continue;
+                                            }
 
+                                            if (len > 100) {
+                                                mState = STATE_MEDIA_RECVED;
+                                                showStateDebugMsg(mState);
+                                            }
                                             //process mjpg data
                                             CommandEncoder.parseMediaCommand(instance, mediaBuffer, len);
                                         }
@@ -303,7 +312,7 @@ public class WifiCar
 
     public boolean move(int i, int j){
         byte abyte0[];
-        if (mState != STATE_PROXY_CONNECTED || cmdOutputStream == null) return false;
+        if (mState < STATE_PROXY_CONNECTED || cmdOutputStream == null) return false;
 
         try {
             abyte0 = CommandEncoder.cmdDeviceControlReq(i, j);
@@ -353,41 +362,52 @@ public class WifiCar
             bUpnpAdded = false;
             try {
                 AppLog.i(TAG, "Therad start getExternal IP... Looking for Internet Gateway Device...");
+                String externalIp;
                 InternetGatewayDevice[] IGDs = InternetGatewayDevice.getDevices(discoveryTiemout);
                 if (IGDs != null) {
                     for (int i = 0; i < IGDs.length; i++) {
+                        boolean mapped = false;
+                        int portNum = HOST_CMD_PORT;
+                        String localHostIP = getLocalIpAddr();
+
                         InternetGatewayDevice testIGD = IGDs[i];
                         AppLog.i(TAG, "Found device, Name:" + testIGD.getIGDRootDevice().getModelName());
-                        AppLog.i(TAG, "Found device, IP address: " + testIGD.getExternalIPAddress());
+                        externalIp = "";
+                        try {
+                            externalIp = testIGD.getExternalIPAddress();
+                            AppLog.i(TAG, "Found device, IP address: " + externalIp);
 
-                        // now let's open the port
-                        int portNum = HOST_CMD_PORT;
-                        AppLog.i(TAG, "Trying to add upnp mapping" + portNum + "...");
+                            // now let's open the port
 
-                        String localHostIP = getLocalIpAddr();
-                        AppLog.i(TAG, "localHostIP: " + localHostIP);
+                            AppLog.i(TAG, "Trying to add upnp mapping" + portNum + "...");
 
-                        //remove port mapping already set
-                        boolean mapped = testIGD.deletePortMapping(null, portNum, "TCP");
-                        mapped = testIGD.addPortMapping("RoverCmd", null, portNum, portNum, localHostIP, 0, "TCP");
 
-                        mapped = testIGD.deletePortMapping(null, portNum + 1, "TCP");
-                        mapped = testIGD.addPortMapping("RoverMedia", null, portNum + 1, portNum + 1, localHostIP, 0, "TCP");
+                            AppLog.i(TAG, "localHostIP: " + localHostIP);
+
+                            //remove port mapping already set
+                            mapped = testIGD.deletePortMapping(null, portNum, "TCP");
+                            mapped = testIGD.addPortMapping("RoverCmd", null, portNum, portNum, localHostIP, 0, "TCP");
+
+                            mapped = testIGD.deletePortMapping(null, portNum + 1, "TCP");
+                            mapped = testIGD.addPortMapping("RoverMedia", null, portNum + 1, portNum + 1, localHostIP, 0, "TCP");
+                        } catch (UPNPResponseException respEx) {
+                            AppLog.e(TAG, "UPNP device unhappy " + respEx.getDetailErrorCode() + " " + respEx.getDetailErrorDescription());
+                        }
                         AppLog.i(TAG, "AddPortState: " + mapped);
                         if (mapped) {
                             AppLog.i(TAG, "Port " + portNum + " mapped to " + localHostIP);
-                            AppLog.i(TAG, "Current mappings count is " + testIGD.getNatMappingsCount());
+                            //AppLog.i(TAG, "Current mappings count is " + testIGD.getNatMappingsCount());
                             // checking on the device
-                            ActionResponse resp = testIGD.getSpecificPortMappingEntry(null, portNum, "TCP");
-                            if (resp != null) {
+                            //ActionResponse resp = testIGD.getSpecificPortMappingEntry(null, portNum, "TCP");
+                            //if (resp != null) {
                                 AppLog.i(TAG, "Port: " + portNum + " mapping confirmation received from device");
                                 bUpnpAdded = true;
 
                                 //step 3:register to cloud
-                                startClientReg(cameraId, testIGD.getExternalIPAddress(), portNum);
+                                startClientReg(cameraId, externalIp, portNum);
                                 mState = STATE_REG_CLOUD;
                                 showStateDebugMsg(mState);
-                            }
+                            //}
                         }
                     }
                     AppLog.i(TAG, "Add upnp mapping Done!");
@@ -396,8 +416,6 @@ public class WifiCar
                 }
             } catch (IOException ex) {
                 AppLog.e(TAG, "IOException occured during discovery or ports mapping " + ex.getMessage());
-            } catch (UPNPResponseException respEx) {
-                AppLog.e(TAG, "UPNP device unhappy " + respEx.getDetailErrorCode() + " " + respEx.getDetailErrorDescription());
             }
 
             if (bUpnpAdded) {
@@ -431,13 +449,15 @@ public class WifiCar
                     //TODO:reconnect
                     break;
                 }
-                if(i <= 0) {
-                    AppLog.e(TAG, "cloud receive loop read error! i:" + i);
-                    continue;
-                }
+
 
                 try {
                     cloudInputStream.read(cloudBuffer, 0, i);
+
+                    if(i <= 0) {
+                        //AppLog.e(TAG, "cloud receive loop read error! i:" + i);
+                        continue;
+                    }
                     CommandEncoder.parseCloudCommand(instance, cloudBuffer, i);
 
                 } catch(IOException ioexception) {
@@ -462,9 +482,10 @@ public class WifiCar
 
     void startClientReg(String devId, String ipv4Addr, int port) {
         try {
+            AppLog.i(TAG, "startClientReg,devId:" + devId + " ip:" + ipv4Addr + " port:" + port);
             if (devId != null && devId.length() > 0
-                && devId != null && !devId.equals("0.0.0.0")
-                && port > 0 && port < 5000) {
+                && ipv4Addr != null && !ipv4Addr.equals("0.0.0.0")
+                && port > 0 && port < 65000) {
                 byte abyte0[] = CommandEncoder.cmdClientRegReq(devId, ip2int(ipv4Addr), port);
                 cloudOutputStream.write(abyte0);
                 cloudOutputStream.flush();
@@ -483,13 +504,18 @@ public class WifiCar
         }
     }
 
-    int ip2int(String ipv4) {
-        String[] ipArr = ipv4.split(".");
+    long ip2int(String ipv4) {
+        String[] ipArr = ipv4.split("\\.");
         if (ipArr!= null && ipArr.length == 4) {
-            return Integer.valueOf(ipArr[0]) << 24
-                    + Integer.valueOf(ipArr[1]) << 16
-                    + Integer.valueOf(ipArr[2]) << 8
-                    + Integer.valueOf(ipArr[3]);
+            int i0 = Integer.parseInt(ipArr[0]) & 0xFF;
+            int i1 = Integer.parseInt(ipArr[1]) & 0xFF;
+            int i2 = Integer.parseInt(ipArr[2]) & 0xFF;
+            int i3 = Integer.parseInt(ipArr[3]) & 0xFF;
+            int m = i0 << 24;
+            m += i1<<16;
+            m += i2<<8;
+            m += i3;
+            return m;
         }
         return  0;
     }

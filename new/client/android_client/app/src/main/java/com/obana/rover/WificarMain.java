@@ -269,6 +269,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     }
 
     public void sendToastMessage(String str) {
+        if (handler == null) return;
         Bundle bundle = new Bundle();
         bundle.putString(BUNDLE_KEY_TOAST_MSG, str);
 
@@ -278,6 +279,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     }
 
     public void sendDebugMessage(String str) {
+        if (handler == null) return;
         Bundle bundle = new Bundle();
         bundle.putString(BUNDLE_KEY_TOAST_MSG, str);
 
