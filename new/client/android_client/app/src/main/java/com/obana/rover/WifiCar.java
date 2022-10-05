@@ -21,6 +21,7 @@ import java.net.Socket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.text.ParseException;
+import java.util.HashMap;
 import java.util.Timer;
 import java.util.TimerTask;
 import javax.net.SocketFactory;
@@ -42,6 +43,8 @@ public class WifiCar
     private static final int CAR_MODE_LOCAL = 0x10;
     private static final int CAR_MODE_CLOUD = 0x11;
 
+    private static final String CLOUD_HOST_ADDR = "obana.f3322.org";
+    private static final int CLOUD_HOST_PORT = 19092;
     private static final int HOST_CMD_PORT = 28001;
 
     private static final int CAR_VERSION_20 = 2;
@@ -50,11 +53,33 @@ public class WifiCar
     private static final int CMD_BUF_SIZE = 1024;
     private static final int MEDIA_BUF_SIZE = (64*1024);
 
-    private int carStateMode;//0-local;1-cloud
+    private static final int STATE_UNKNOW = 0;
+    private static final int STATE_CONNECT_CLOUD    = 100;
+    private static final int STATE_ADD_UPNP         = 101;
+    private static final int STATE_REG_CLOUD        = 102;
+    private static final int STATE_CREATE_SERVER    = 103;
+    private static final int STATE_CLOUD_REGED      = 104;
+    private static final int STATE_PROXY_CONNECTED  = 105;
+
+    HashMap<Integer, String> stateDebugMsgs = new HashMap<Integer, String>() {
+        {   put(STATE_UNKNOW, "STATE_UNKNOW");
+            put(STATE_CONNECT_CLOUD, "STATE_CONNECT_CLOUD");
+            put(STATE_ADD_UPNP, "STATE_ADD_UPNP");
+            put(STATE_REG_CLOUD, "STATE_REG_CLOUD");
+            put(STATE_CREATE_SERVER, "STATE_CREATE_SERVER");
+            put(STATE_CLOUD_REGED, "STATE_CLOUD_REGED");
+            put(STATE_CLOUD_REGED, "STATE_CLOUD_REGED");
+        }
+    };
+    private int mState = STATE_UNKNOW;
     private int carVersion;//version of wificar;2.0;3.0
-    DataInputStream dataInputStream;
-    OutputStream cmdOutputStream;
-    InputStream mediaReceiverInputStream;
+
+    DataInputStream cloudInputStream = null;
+    DataOutputStream cloudOutputStream = null;
+
+    InputStream cmdInputStream = null;
+    OutputStream cmdOutputStream = null;
+    InputStream mediaReceiverInputStream = null;
     String cameraId;
 
     private WifiCar instance;
@@ -64,15 +89,18 @@ public class WifiCar
     private long lastMoveCurrentTime;
     private Activity mainUI;
 
-
+    Socket cloudSocket = null;
     ServerSocket cmdServerSocket = null;
     ServerSocket mediaServerSocket = null;
 
     Thread mediaRevThread;
-    boolean bCmdConnected = false;
-    boolean bMediaConnected = false;
+    boolean bInited = false;
+    boolean bServerListened = false;
     boolean bUpnpAdded = false;
+    boolean bClientReged = false;
+    boolean bProxyConnected = false;
 
+    byte[] cloudBuffer = new byte[CMD_BUF_SIZE];
     byte[] cmdBuffer = new byte[CMD_BUF_SIZE];
     byte[] mediaBuffer = new byte[MEDIA_BUF_SIZE];
 
@@ -81,22 +109,25 @@ public class WifiCar
     public WifiCar(Activity activity)
     {
 
+        cameraId = "1100000";//for test,
 
-     
-        carStateMode = CAR_MODE_LOCAL;
+        mState = STATE_UNKNOW;
+        showStateDebugMsg(mState);
         keepAliveTimer = new Timer("keep alive");
         instance = null;
-        bCmdConnected = false;
    
         mainUI = null;
 
+        cloudSocket = null;
         cmdServerSocket = null;
         mediaServerSocket = null;
 
+        cloudInputStream = null;
+        cloudOutputStream = null;
         cmdOutputStream = null;
-        dataInputStream = null;
+        cmdInputStream = null;
         mediaReceiverInputStream = null;
-     
+
         instance = this;
 
         mainUI = activity;
@@ -108,123 +139,158 @@ public class WifiCar
 
     }
 
-    public boolean initCmdConnection() throws IOException {
-        ConnectivityManager connectivityManager = (ConnectivityManager)(mainUI.getSystemService(Context.CONNECTIVITY_SERVICE));
-        Network network = connectivityManager.getActiveNetwork();
-        if (network ==null) return false;
+    public boolean initCmdConnection() {
+        //setup client cocket to cloud
+        try {
+            ConnectivityManager connectivityManager = (ConnectivityManager) (mainUI.getSystemService(Context.CONNECTIVITY_SERVICE));
+            Network network = connectivityManager.getActiveNetwork();
+            if (network == null) return false;
 
-        cmdServerSocket = new ServerSocket(HOST_CMD_PORT);
-        mediaServerSocket = new ServerSocket(HOST_CMD_PORT + 1);
+            //step 1:connect to cloud
+            InetAddress addr = network.getByName(CLOUD_HOST_ADDR);
+            AppLog.i(TAG, "connecting cloud socket:" +  CLOUD_HOST_ADDR + "..... ip:" + addr.getHostAddress());
 
-        cmdOutputStream = null;
-        dataInputStream = null;
-
-        bCmdConnected = false;
-        Thread cmdThread = new Thread(new Runnable() {
-            public void run()//this is main receive loop
-            {
-                try {
-                    while (true) {
-                        //just waiting for porxy cmd socket connect
-                        AppLog.i(TAG, "waiting for client cmd connection ....");
-                        final Socket socket = cmdServerSocket.accept();
-                        //print proxy cmd socket addr&port
-                        final String address = socket.getRemoteSocketAddress().toString();
-                        AppLog.i(TAG, "one client cmd connected, address:" + address);
-
-                        bCmdConnected = true;
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    InputStream inputStream = socket.getInputStream();
-
-                                    InputStreamReader isr = new InputStreamReader(socket.getInputStream());
-
-                                    int len;
-                                    while ((len = inputStream.read(cmdBuffer)) != -1){
-
-                                        socket.shutdownInput();
-                                        //do something
-                                        //sendGps();
-                                    }
-                                }catch (Exception e){
-
-                                }finally {
-                                    synchronized (this){
-                                        //
-                                    }
-                                }
-                            }
-                        }).start();
-
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+            InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, CLOUD_HOST_PORT);
+            cloudSocket = SocketFactory.getDefault().createSocket();
+            cloudSocket.connect(inetSocketAddress, 5000);
+            if(!cloudSocket.isConnected()){
+                AppLog.e(TAG, "connecting cloud socket failed!");
+                bInited = false;
+                return false;
             }
-        });
-        cmdThread.setName("cmdThread");
-        cmdThread.start();
 
-        bMediaConnected = false;
-        Thread mediaThread = new Thread(new Runnable() {
-            public void run()//this is main receive loop
-            {
-                try {
-                    while (true) {
-                        //just waiting for porxy cmd socket connect
-                        AppLog.i(TAG, "waiting for client media connection ....");
-                        final Socket socket = mediaServerSocket.accept();
-                        //print proxy media socket addr&port
-                        final String address = socket.getRemoteSocketAddress().toString();
-                        AppLog.i(TAG, "one client media connected, address:" + address);
+            cloudInputStream = new DataInputStream(cloudSocket.getInputStream());
+            cloudOutputStream = new DataOutputStream(cloudSocket.getOutputStream());
+            new Thread(cloudSocketRecv).start();
+            mState = STATE_CONNECT_CLOUD;
+            showStateDebugMsg(mState);
 
-                        bMediaConnected = true;
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    mediaReceiverInputStream = socket.getInputStream();
-
-                                    InputStreamReader isr = new InputStreamReader(mediaReceiverInputStream);
-
-                                    int len;
-                                    while ((len = mediaReceiverInputStream.read(mediaBuffer)) != -1){
-                                        socket.shutdownInput();
-
-                                        //process mjpg data
-                                        CommandEncoder.parseMediaCommand(instance, mediaBuffer, len);
-                                    }
-                                }catch (Exception e){
-
-                                }finally {
-                                    synchronized (this){
-                                        //
-                                    }
-                                }
-                            }
-                        }).start();
-
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        mediaThread.setName("mediaThread");
-        mediaThread.start();
-
-
-        Thread getIpThread = new Thread(runnableGetExternalIP);
-        getIpThread.setName("getIpThread");
-        getIpThread.start();
+            //step 2:get p2p ipv4 addr
+            Thread getIpThread = new Thread(runnableGetExternalIP);
+            getIpThread.setName("getIpThread");
+            getIpThread.start();
+        } catch (IOException e) {
+            AppLog.e(TAG, "connect to cloud socket failed!");
+            bInited = false;
+            return false;
+        }
 
         return true;
     }
 
+    public boolean createServerConnection() {
+        //create cmd & media server socket
+        try {
+            bServerListened = false;
 
+            cmdServerSocket = new ServerSocket(HOST_CMD_PORT);
+            mediaServerSocket = new ServerSocket(HOST_CMD_PORT + 1);
 
+            cmdOutputStream = null;
+            cmdInputStream = null;
+
+            Thread cmdThread = new Thread(new Runnable() {
+                public void run()//this is main receive loop
+                {
+                    try {
+                        while (true) {
+                            //just waiting for porxy cmd socket connect
+                            AppLog.i(TAG, "waiting for client cmd connection ....");
+                            final Socket socket = cmdServerSocket.accept();
+                            //print proxy cmd socket addr&port
+                            final String address = socket.getRemoteSocketAddress().toString();
+                            AppLog.i(TAG, "one client cmd connected, address:" + address);
+                            mState = STATE_PROXY_CONNECTED;
+                            showStateDebugMsg(mState);
+                            new Thread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        cmdInputStream = socket.getInputStream();
+                                        cmdOutputStream = socket.getOutputStream();
+                                        InputStreamReader isr = new InputStreamReader(cmdInputStream);
+
+                                        int len;
+                                        while ((len = cmdInputStream.read(cmdBuffer)) != -1) {
+
+                                            socket.shutdownInput();
+                                            //do something
+                                            //sendGps();
+                                        }
+                                    } catch (Exception e) {
+
+                                    } finally {
+                                        synchronized (this) {
+                                            //
+                                        }
+                                    }
+                                }
+                            }).start();
+
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+            cmdThread.setName("cmdThread");
+            cmdThread.start();
+
+            Thread mediaThread = new Thread(new Runnable() {
+                public void run()//this is main receive loop
+                {
+                    try {
+                        while (true) {
+                            //just waiting for porxy cmd socket connect
+                            AppLog.i(TAG, "waiting for client media connection ....");
+                            final Socket socket = mediaServerSocket.accept();
+                            //print proxy media socket addr&port
+                            final String address = socket.getRemoteSocketAddress().toString();
+                            AppLog.i(TAG, "one client media connected, address:" + address);
+
+                            new Thread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        mediaReceiverInputStream = socket.getInputStream();
+
+                                        InputStreamReader isr = new InputStreamReader(mediaReceiverInputStream);
+
+                                        int len;
+                                        while ((len = mediaReceiverInputStream.read(mediaBuffer)) != -1) {
+                                            socket.shutdownInput();
+
+                                            //process mjpg data
+                                            CommandEncoder.parseMediaCommand(instance, mediaBuffer, len);
+                                        }
+                                    } catch (Exception e) {
+
+                                    } finally {
+                                        synchronized (this) {
+                                            //
+                                        }
+                                    }
+                                }
+                            }).start();
+
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+            mediaThread.setName("mediaThread");
+            mediaThread.start();
+        } catch (IOException e) {
+            AppLog.e(TAG, "create server socket failed!");
+            bServerListened = false;
+            return false;
+        }
+        bServerListened = true;
+        mState = STATE_CREATE_SERVER;
+        showStateDebugMsg(mState);
+        return true;
+    }
     public void switchCamera(boolean isSecondCamera)  {
 
     }
@@ -237,7 +303,7 @@ public class WifiCar
 
     public boolean move(int i, int j){
         byte abyte0[];
-        if (!bCmdConnected || cmdOutputStream == null) return false;
+        if (mState != STATE_PROXY_CONNECTED || cmdOutputStream == null) return false;
 
         try {
             abyte0 = CommandEncoder.cmdDeviceControlReq(i, j);
@@ -247,7 +313,6 @@ public class WifiCar
             cmdOutputStream.flush();
         } catch(IOException ioexception) {
             AppLog.e(TAG, "IOException when move wificar!");
-            bCmdConnected = false;
             cmdOutputStream = null;
         }
         
@@ -292,7 +357,7 @@ public class WifiCar
                 if (IGDs != null) {
                     for (int i = 0; i < IGDs.length; i++) {
                         InternetGatewayDevice testIGD = IGDs[i];
-                        AppLog.i(TAG,"Found device, Name:" + testIGD.getIGDRootDevice().getModelName());
+                        AppLog.i(TAG, "Found device, Name:" + testIGD.getIGDRootDevice().getModelName());
                         AppLog.i(TAG, "Found device, IP address: " + testIGD.getExternalIPAddress());
 
                         // now let's open the port
@@ -301,8 +366,13 @@ public class WifiCar
 
                         String localHostIP = getLocalIpAddr();
                         AppLog.i(TAG, "localHostIP: " + localHostIP);
-                        boolean mapped = testIGD.addPortMapping("RoverCmd", null, portNum, portNum, localHostIP, 0, "TCP");
-                        mapped = testIGD.addPortMapping("RoverMedia", null, portNum+1, portNum+1, localHostIP, 0, "TCP");
+
+                        //remove port mapping already set
+                        boolean mapped = testIGD.deletePortMapping(null, portNum, "TCP");
+                        mapped = testIGD.addPortMapping("RoverCmd", null, portNum, portNum, localHostIP, 0, "TCP");
+
+                        mapped = testIGD.deletePortMapping(null, portNum + 1, "TCP");
+                        mapped = testIGD.addPortMapping("RoverMedia", null, portNum + 1, portNum + 1, localHostIP, 0, "TCP");
                         AppLog.i(TAG, "AddPortState: " + mapped);
                         if (mapped) {
                             AppLog.i(TAG, "Port " + portNum + " mapped to " + localHostIP);
@@ -312,6 +382,11 @@ public class WifiCar
                             if (resp != null) {
                                 AppLog.i(TAG, "Port: " + portNum + " mapping confirmation received from device");
                                 bUpnpAdded = true;
+
+                                //step 3:register to cloud
+                                startClientReg(cameraId, testIGD.getExternalIPAddress(), portNum);
+                                mState = STATE_REG_CLOUD;
+                                showStateDebugMsg(mState);
                             }
                         }
                     }
@@ -325,6 +400,50 @@ public class WifiCar
                 AppLog.e(TAG, "UPNP device unhappy " + respEx.getDetailErrorCode() + " " + respEx.getDetailErrorDescription());
             }
 
+            if (bUpnpAdded) {
+                //step 4: create cmd & media socket
+                mState = STATE_ADD_UPNP;
+                showStateDebugMsg(mState);
+                createServerConnection();
+            }
+        }
+    };
+
+    Runnable cloudSocketRecv = new Runnable() {
+        /*
+         * start this thread for get router external ip addr
+         * it depends on the route has a external ip & support upnp
+         * then client will send ipaddr to signal server
+         * signal server will check whether this ipaddr is same with client's external ipaddr
+         * this ipaddr will send to proxy if same
+         * proxy use this ipaddr to establish p2p connection
+         * */
+        @Override
+        public void run()//this is main receive loop
+        {
+            AppLog.i(TAG, "--->ready to recv cloud data");
+            int i;
+            do {
+                try {
+                    i = cloudInputStream.available();
+                } catch(IOException ioexception) {
+                    AppLog.e(TAG, "cloud receive loop ioexception!, just exit thread!");
+                    //TODO:reconnect
+                    break;
+                }
+                if(i <= 0) {
+                    AppLog.e(TAG, "cloud receive loop read error! i:" + i);
+                    continue;
+                }
+
+                try {
+                    cloudInputStream.read(cloudBuffer, 0, i);
+                    CommandEncoder.parseCloudCommand(instance, cloudBuffer, i);
+
+                } catch(IOException ioexception) {
+                    AppLog.e(TAG, "main parseCommand io exception!, just throw it!");
+                }
+            } while(true);
         }
     };
 
@@ -339,5 +458,44 @@ public class WifiCar
         sb.append((ipInt >> 16) & 0xFF).append(".");
         sb.append((ipInt >> 24) & 0xFF);
         return sb.toString();
+    }
+
+    void startClientReg(String devId, String ipv4Addr, int port) {
+        try {
+            if (devId != null && devId.length() > 0
+                && devId != null && !devId.equals("0.0.0.0")
+                && port > 0 && port < 5000) {
+                byte abyte0[] = CommandEncoder.cmdClientRegReq(devId, ip2int(ipv4Addr), port);
+                cloudOutputStream.write(abyte0);
+                cloudOutputStream.flush();
+            }
+        } catch (Exception e) {
+
+        }
+    }
+    public void processClientRegResult(int result) {
+        if (result == 100) {
+            mState = STATE_CLOUD_REGED;
+            showStateDebugMsg(mState);
+            AppLog.i(TAG, "client register to cloud successfully!");
+        } else {
+            AppLog.e(TAG, "client register to cloud failed!");
+        }
+    }
+
+    int ip2int(String ipv4) {
+        String[] ipArr = ipv4.split(".");
+        if (ipArr!= null && ipArr.length == 4) {
+            return Integer.valueOf(ipArr[0]) << 24
+                    + Integer.valueOf(ipArr[1]) << 16
+                    + Integer.valueOf(ipArr[2]) << 8
+                    + Integer.valueOf(ipArr[3]);
+        }
+        return  0;
+    }
+
+    void showStateDebugMsg(int state) {
+        String debugMsg = stateDebugMsgs.get(state);
+        ((WificarMain)mainUI).sendDebugMessage(state + ":" + debugMsg);
     }
 }
