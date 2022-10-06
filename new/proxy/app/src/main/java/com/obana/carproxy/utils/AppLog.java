@@ -8,7 +8,7 @@ public class AppLog {
   
   public static void d(String paramString1, String paramString2) {
     if (showLog)
-      Log.i(paramString1, paramString2); 
+      Log.e(paramString1, paramString2);
   }
   
   public static void e(String paramString) {
@@ -32,7 +32,7 @@ public class AppLog {
   
   public static void i(String paramString1, String paramString2) {
     if (showLog)
-      Log.i(paramString1, paramString2); 
+      Log.e(paramString1, paramString2);
   }
   
   public static void v(String paramString1, String paramString2) {
