@@ -1,21 +1,6 @@
 package com.obana.carproxy;
 
 import android.app.Activity;
-import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.net.Uri;
-import android.os.Environment;
-import android.os.Handler;
-import android.widget.Toast;
-
-import android.net.ConnectivityManager;
-import android.net.NetworkRequest;
-import android.net.NetworkRequest.*;
-import android.net.NetworkCapabilities;
 import android.net.Network;
 
 import com.obana.carproxy.utils.*;
@@ -23,24 +8,12 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.InetAddress;
-import java.nio.ByteBuffer;
-import java.text.ParseException;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.HashMap;
 import javax.net.SocketFactory;
-//import com.obana.rover.WificarMain;
-import java.net.Inet6Address;
-import java.net.ServerSocket;
-
-//import org.apache.http.util.ByteArrayBuffer;
-
-// Referenced classes of package com.wificar.component:
-//            AudioComponent, VideoComponent, AudioData, VideoData, 
-//            CommandEncoder, TalkData
 
 public class CarProxy
 {
-    private static final String TAG = "CarProxy";
+    private static final String TAG = "CarProxy_T";
     private static final boolean DBG = false;
 
     Socket carCmdSocket;
@@ -68,12 +41,7 @@ public class CarProxy
 
 
     private Main mainUI;
-
-
-    public boolean b_connected_car_cmd = false;
-    public boolean b_connected_cloud_cmd = false;
-    public boolean b_connected_car_media = false;
-    public boolean b_connected_client = false;
+    Network cachedNetwork = null;
 
     //this sock only for uplink
     private static final String CLOUD_HOST_NAME = "obana.f3322.org";
@@ -87,8 +55,31 @@ public class CarProxy
     private static final String CAR_MEDIA_HOST_ADDR = "192.168.1.100";
     private static final int CAR_MEDIA_PORT = 80;
 
+    private static final int STATE_THREAD_RUNNING = 1;
+    private static final int STATE_THREAD_IDLE = 0;
+
     private static final int CMD_BUF_LEN = 1024;
     private static final int MEDIA_BUF_LEN = (64*1024);
+
+    private static final int STATE_INIT                 = 100;
+    private static final int STATE_WIFI_OK              = 101;
+    private static final int STATE_CAR_CONNECTED        = 102;
+    private static final int STATE_CELL_OK              = 103;
+    private static final int STATE_CLOUD_CONNECTED      = 104;
+    private static final int STATE_PROXY_REGED          = 105;
+    private static final int STATE_CLIENT_CONNECTED     = 106;
+    HashMap<Integer, String> stateDebugMsgs = new HashMap<Integer, String>() {
+        {   put(STATE_INIT, "STATE_INIT");
+            put(STATE_WIFI_OK, "STATE_WIFI_OK");
+            put(STATE_CAR_CONNECTED, "STATE_CAR_CONNECTED");
+            put(STATE_CELL_OK, "STATE_CELL_OK");
+            put(STATE_CLOUD_CONNECTED, "STATE_CLOUD_CONNECTED");
+            put(STATE_PROXY_REGED, "STATE_PROXY_REGED");
+            put(STATE_CLIENT_CONNECTED, "STATE_CLIENT_CONNECTED");
+        }
+    };
+    private int mState = STATE_INIT;
+
     private byte[] cmdUplinkBuffer;
     private byte[] cmdDownlinkBuffer;
     private byte[] mediaUplinkBuffer;
@@ -97,17 +88,16 @@ public class CarProxy
     //private int cmdUplinkBufferLen = 0;
     private byte[] bufferedDownlinkCmd = null;
 
-    private boolean carReady = false;//set carReady to TRUE after mediaLoginResp received
     private String cameraId = "";//camera id from cmdLoginResp
     int L1, L2, R1, R2;//for cmdVerifyReq
 
     Thread thread_cmd_downlink = null;
     Thread thread_cmd_uplink = null;
     Thread thread_media_uplink = null;
+    Thread thread_cloud = null;
 
     int clientIp = 0;
     int clientPort = 0;
-    Network cachedNetwork = null;
 
     public CarProxy(Activity activity)
     {
@@ -119,18 +109,21 @@ public class CarProxy
         mediaUplinkBuffer = new byte[MEDIA_BUF_LEN];
 
         cloudBuffer = new byte[CMD_BUF_LEN];
+        mState = STATE_INIT;
         AppLog.d(TAG, "new CarProxy created successfully!");
     }
 
+    int state_cmd_uplink = STATE_THREAD_IDLE;
     Runnable runnable_cmd_uplink = new Runnable() {
         //upload cmd from wificar to cloud
         public void run()
         {
             int i;
+            state_cmd_uplink = STATE_THREAD_RUNNING;
             AppLog.i(TAG, "cmd uplink Thread ---> start running");
             do {
                 try {
-                    if (cmdInputStreamUplink == null || cmdOutputStreamUplink == null) {
+                    if (cmdInputStreamUplink == null) {
                         Thread.sleep(2000);
                         continue;
                     }
@@ -151,10 +144,7 @@ public class CarProxy
 
                     parseCommand(cmdUplinkBuffer, i);
 
-                    if (carReady == false) {
-                        /*this means car is not ready, not forward cmd to client
-                         * it will start cmd forwarding after mediaLoginResp is received
-                         * */
+                    if (cmdOutputStreamUplink == null) {
                         continue;
                     }
 
@@ -164,27 +154,26 @@ public class CarProxy
                     cmdOutputStreamUplink.flush();
 
                 } catch(IOException ioexception) {
-                    ioexception.printStackTrace();
                     AppLog.i(TAG, "cmd uplink--->write data to cloud ioexception!, just exit thread!");
                     break;
                 }
             } while(true);
-            thread_cmd_uplink = null;
-            b_connected_car_cmd = false;
-            carReady = false;//this means car is disconnected
+            state_cmd_uplink = STATE_THREAD_IDLE;
         }
     };
-    
+
+    int state_cmd_downlink = STATE_THREAD_IDLE;
     Runnable runnable_cmd_downlink = new Runnable() {
         //upload cmd from wificar to cloud
         public void run()//this is main receive loop
         {
             int i;
             int count = 0;
+            state_cmd_downlink = STATE_THREAD_RUNNING;
             byte tmp[] = null;
             do {
                 try {
-                    if (cmdInputStreamDownlink == null || cmdOutputStreamDownlink == null) {
+                    if (cmdInputStreamDownlink == null) {
                         Thread.sleep(2000);
                         continue;
                     }
@@ -202,7 +191,7 @@ public class CarProxy
                     break;
                 }
 
-                if (carReady == false) {
+                if (cmdOutputStreamDownlink == null) {
                     /*this means car is not ready, not forward cmd to car
                     * it will start cmd forwarding after mediaLoginResp is received
                     * */
@@ -216,34 +205,25 @@ public class CarProxy
                     mainUI.sendThreadUpdateMessage(true, count);
                 } catch(IOException ioexception) {
                     AppLog.i(TAG, "cmd downlink--->write data to car ioexception:" + ioexception.toString());
-                    if (ioexception.toString().contains("Connection reset")) {//reconnect 
-                        /*if android client started after proxy started
-                         wificar will close the socket without client communication
-                         hence, it need to reconnect socket & resend the buffered command
-                         */
-                        b_connected_car_cmd = false;
-                        //bufferedDownlinkCmd = tmp;
-                        mainUI.reConnectCarDelayed(100);//wait 100ms
-                        return;
-                    } else {
-                        break;
-                    }
+                    break;
                 }
             } while(true);
-            thread_cmd_downlink = null;
+            state_cmd_downlink = STATE_THREAD_IDLE;
         }
     };
 
+    int state_media_uplink = STATE_THREAD_IDLE;
     Runnable runnable_media_uplink = new Runnable() {
         //upload media from wificar to cloud
         public void run()//this is main receive loop
         {
             int i;
             int count = 0;
+            state_media_uplink = STATE_THREAD_RUNNING;
             AppLog.i(TAG, "media uplink Thread ---> start running");
             do {
                 try {
-                    if (mediaInputStreamUplink == null || mediaOutputStreamUplink == null || carReady == false) {
+                    if (mediaInputStreamUplink == null) {
                         /*it is important to stop media forward in case socket is not ready
                         * it alse not forwarding media when carReady is false
                         * it will start media forward after mediaLoginResp is received
@@ -259,12 +239,14 @@ public class CarProxy
                     //AppLog.i(TAG, "media uplink Thread ---> read data len:" + i);
                     mediaInputStreamUplink.read(mediaUplinkBuffer, 0, i);
                 } catch(Exception ioexception) {
-                    ioexception.printStackTrace();
                     AppLog.i(TAG, "media uplink--->read data from car ioexception!, just exit thread!");
                     break;
                 }
-                
 
+                if (mediaOutputStreamUplink == null) {
+                    /*this means client is not ready * */
+                    continue;
+                }
                 try {
                     byte tmp[] = arrayCopy(mediaUplinkBuffer, 0, i);
                     mediaOutputStreamUplink.write(tmp);//use same uplink socket for both cmd & media
@@ -272,22 +254,24 @@ public class CarProxy
                     count ++;
                     mainUI.sendThreadUpdateMessage(false, count);
                 } catch(IOException ioexception) {
-                    ioexception.printStackTrace();
                     AppLog.i(TAG, "media uplink--->write data to cloud ioexception!, just exit thread!");
                     break;
                 }
             } while(true);
-            thread_media_uplink = null;
+            state_media_uplink = STATE_THREAD_IDLE;
         }
     };
 
     //cloud runnable
+    int state_cloud = STATE_THREAD_IDLE;
     Runnable runnable_cloud = new Runnable() {
         //thread of cloud socket
         public void run()//this is main receive loop
         {
             int i;
             byte[] tmp = null;
+            state_cloud = STATE_THREAD_RUNNING;
+            AppLog.i(TAG, "---> cloud recv thread running ....");
             do {
                 try {
                     if (cloudInputStream == null) {
@@ -301,7 +285,7 @@ public class CarProxy
                         continue;
                     }
                     if (DBG) AppLog.i(TAG, "cloud Thread ---> read data len:" + i);
-                    cmdInputStreamDownlink.read(cloudBuffer, 0, i);
+                    cloudInputStream.read(cloudBuffer, 0, i);
                 } catch(Exception ioexception) {
                     AppLog.e(TAG, "cloud thread ioexception!, just exit thread!");
                     break;
@@ -314,38 +298,44 @@ public class CarProxy
                     AppLog.e(TAG, "parseCloudCommand ioexception!");
                 }
             } while(true);
+            state_cloud = STATE_THREAD_IDLE;
         }
     };
 
-
-
     public boolean connectToCarCmd() throws IOException
     {
-        if (b_connected_car_cmd) {
-            AppLog.i(TAG, "car cmd--->alreay connect, just return");
+        mState = STATE_WIFI_OK;
+        if (state_cmd_downlink == STATE_THREAD_RUNNING && state_cmd_uplink == STATE_THREAD_RUNNING) {
+            AppLog.i(TAG, "cmd uplink&downlink working, do nothing.");
             return true;
         }
         if (carCmdSocket!= null) {
-            b_connected_car_cmd = false;
+            AppLog.i(TAG, "close previous car cmd socket...");
             carCmdSocket.close();
         }
-        carReady = false;
+        if (cmdOutputStreamDownlink != null ){
+            cmdOutputStreamDownlink.close();
+            cmdOutputStreamDownlink = null;
+        }
+        if (cmdInputStreamUplink != null ){
+            cmdInputStreamUplink.close();
+            cmdInputStreamUplink = null;
+        }
 
         carCmdSocket = SocketFactory.getDefault().createSocket();
         InetSocketAddress inetSocketAddress = new InetSocketAddress(CAR_HOST_ADDR, CAR_PORT);
         carCmdSocket.connect(inetSocketAddress, 5000);
-        AppLog.i(TAG, "Car Cmd Socket ---> connected:" + CAR_HOST_ADDR);
+        AppLog.i(TAG, "car cmd Socket ---> connected:" + CAR_HOST_ADDR + " port:" + CAR_PORT);
         carCmdSocket.setSendBufferSize(CMD_BUF_LEN);
         if(!carCmdSocket.isConnected()){
-            AppLog.i(TAG, "--->socket init failed!");
+            AppLog.i(TAG, "--->car cmd socket init failed!");
             throw new IOException();
         }
 
         cmdOutputStreamDownlink = new DataOutputStream(carCmdSocket.getOutputStream());//belong to downlink thread
         cmdInputStreamUplink = new DataInputStream(carCmdSocket.getInputStream());//uplink
-        b_connected_car_cmd = true;
 
-        if (thread_cmd_uplink == null) {
+        if (thread_cmd_uplink == null) {//not use
             thread_cmd_uplink = new Thread(runnable_cmd_uplink);
             thread_cmd_uplink.setName("cmd_uplink Thread");
             thread_cmd_uplink.start();
@@ -355,25 +345,26 @@ public class CarProxy
             thread_cmd_downlink = new Thread(runnable_cmd_downlink);
             thread_cmd_downlink.setName("cmd_downlink Thread");
             thread_cmd_downlink.start();
-            
         }
 
         //TODO:this should be replaced by init CMD from client
+        AppLog.i(TAG, "send login request via car cmd Socket");
         sendCmdLoginReq(cmdOutputStreamDownlink);
 
-        return b_connected_car_cmd;
+        return true;
     }
 
     public boolean ConnectToCarMedia(int i) throws IOException {
-        if (b_connected_car_media) {
-            AppLog.i(TAG, "--->alreay connect media socket, just return");
-            return true;
-        }
-        
+
         if (carMediaSocket!= null) {
             carMediaSocket.close();
         }
-        AppLog.i(TAG, "Car Media Socket connecting .....");
+
+        if (mediaInputStreamUplink != null ){
+            mediaInputStreamUplink.close();
+            mediaInputStreamUplink = null;
+        }
+        AppLog.i(TAG, "car media socket connecting .....");
         carMediaSocket = SocketFactory.getDefault().createSocket();
         InetSocketAddress addr = new InetSocketAddress(CAR_HOST_ADDR, CAR_PORT);
 
@@ -383,10 +374,11 @@ public class CarProxy
             AppLog.i(TAG, "--->media socket connect failed!");
             throw new IOException();
         }
-        AppLog.i(TAG, "Car Media Socket ---> connected:" + CAR_HOST_ADDR);
-        
-        b_connected_car_media = true;
+        AppLog.i(TAG, "car media socket connected!");
+
         mediaInputStreamUplink = new DataInputStream(carMediaSocket.getInputStream());
+
+        //send media login req
         DataOutputStream out = new DataOutputStream(carMediaSocket.getOutputStream());
         byte abyte0[] = CommandEncoder.cmdMediaLoginReq(i);//this is important
         out.write(abyte0);
@@ -399,133 +391,146 @@ public class CarProxy
             thread_media_uplink.setName("media_uplink Thread");
             thread_media_uplink.start();
         }
-        carReady = true;//media input & output uplink stream is OK
-        return b_connected_car_media;
+        mState = STATE_CAR_CONNECTED;
+        return true;
     }
 
     public boolean ConnectToCloud(Network network) throws IOException
     {
-        if (b_connected_cloud_cmd) {
-            AppLog.i(TAG, "--->alreay connect cloud socket, just return");
+        mState = STATE_CELL_OK;
+        AppLog.i(TAG, "STEP 3: start connect to cloud .... ");
+        if (state_cloud == STATE_THREAD_RUNNING) {
+            AppLog.i(TAG, "cloud thread working, do nothing.");
             return true;
         }
 
+        if (cloudSocket!= null) {
+            cloudSocket.close();
+        }
+
+        if (cloudInputStream != null ){
+            cloudInputStream.close();
+            cloudInputStream = null;
+        }
+        if (cloudOutputStream != null ){
+            cloudOutputStream.close();
+            cloudOutputStream = null;
+        }
         cloudSocket = SocketFactory.getDefault().createSocket();
         cloudSocket.setSendBufferSize(CMD_BUF_LEN);//important, it make sure jpg data
 
-        AppLog.i(TAG, "--->cloud cmd socket connecting .....");
-        if (network ==null) network = cachedNetwork;
+        AppLog.i(TAG, "--->cloud socket connecting .....");
+
         if (network ==null) return false;
 
-        cachedNetwork = network;
+        cachedNetwork = network;//used by client p2p connection
 
         InetAddress addr = network.getByName(CLOUD_HOST_NAME);
-        AppLog.i(TAG, "--->get cloud dns addr:" + addr.getHostAddress());
+        AppLog.i(TAG, "HOST name:" +  CLOUD_HOST_NAME + " addr:" + addr.getHostAddress()
+            + " port:" + CLOUD_PORT);
 
         network.bindSocket(cloudSocket);
         InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, CLOUD_PORT);
 
         cloudSocket.connect(inetSocketAddress, 5000);
-        AppLog.i(TAG, "Cloud Cmd Socket ---> connected:" + inetSocketAddress);
+        AppLog.i(TAG, "--->cloud socket connected:" + inetSocketAddress);
+
         if(!cloudSocket.isConnected()){
-            AppLog.i(TAG, "--->cloud socket init failed!");
+            AppLog.e(TAG, "--->cloud socket connect failed!");
             throw new IOException();
         }
         cloudInputStream = new DataInputStream(cloudSocket.getInputStream());
         cloudOutputStream = new DataOutputStream(cloudSocket.getOutputStream());
 
-        b_connected_cloud_cmd = true;
+        if (thread_cloud == null) {
+            //start recv loop
+            thread_cloud = new Thread(runnable_cloud);
+            thread_cloud.setName("cloud Thread");
+            thread_cloud.start();
+        }
 
-        new Thread(runnable_cloud).start();//start recv loop
-
+        AppLog.i(TAG, "STEP 4: send reg cmd to cloud .... ");
         sendCloudRegReq();//reg to cloud
-        return b_connected_cloud_cmd;
+        mState = STATE_CLOUD_CONNECTED;
+        return true;
     }
 
     /*this will connect to client cmd & media socket*/
-    public boolean ConnectToClientP2P(Network network) throws IOException
+    public boolean ConnectToClientP2P() throws IOException
     {
-        if (b_connected_client) {
-            AppLog.i(TAG, "--->alreay connect client via p2p, just return");
-            return true;
+        AppLog.i(TAG, "--->connecting to client via p2p .....");
+
+        //clean up resource
+        if (clientCmdSocket!= null) {
+            clientCmdSocket.close();
+        }
+
+        if (cmdOutputStreamUplink != null ){
+            cmdOutputStreamUplink.close();
+            cmdOutputStreamUplink = null;
+        }
+        if (cmdInputStreamDownlink != null ){
+            cmdInputStreamDownlink.close();
+            cmdInputStreamDownlink = null;
+        }
+        if (mediaOutputStreamUplink != null ){
+            mediaOutputStreamUplink.close();
+            mediaOutputStreamUplink = null;
         }
 
         clientCmdSocket = SocketFactory.getDefault().createSocket();
         clientCmdSocket.setSendBufferSize(CMD_BUF_LEN);//important, it make sure jpg data
 
+        if (clientMediaSocket!= null) {
+            clientMediaSocket.close();
+        }
         clientMediaSocket = SocketFactory.getDefault().createSocket();
         clientMediaSocket.setSendBufferSize(MEDIA_BUF_LEN);//important, it make sure jpg data
 
         AppLog.i(TAG, "--->client p2p cmd&media socket connecting .....");
-        if (network ==null) return false;
+        if (cachedNetwork ==null) return false;
 
-        network.bindSocket(clientCmdSocket);
+        cachedNetwork.bindSocket(clientCmdSocket);
         InetSocketAddress inetSocketAddress;
 
         if (clientIp>0 && clientPort>0) {
             inetSocketAddress = new InetSocketAddress(int2ip(clientIp), clientPort);
-        } else {
-            String CLIENT_HOST_NAME = "obana.f3322.org";
-            int CLIENT_HOST_PORT = 28001;
-            InetAddress addr = network.getByName(CLIENT_HOST_NAME);
-            inetSocketAddress = new InetSocketAddress(addr, CLIENT_HOST_PORT);
+        }  else {
+            return  false;
         }
-        AppLog.i(TAG, "Client Cmd Socket connecting ...." + inetSocketAddress);
+
+        AppLog.i(TAG, "client cmd cocket connecting ...." + inetSocketAddress);
         clientCmdSocket.connect(inetSocketAddress, 5000);
-        AppLog.i(TAG, "Client Cmd Socket ---> connected:" + inetSocketAddress);
+        AppLog.i(TAG, "client cmd cocket connected!");
 
         if(!clientCmdSocket.isConnected()){
             AppLog.i(TAG, "--->client cmd socket connect failed!");
             throw new IOException();
         }
 
-        network.bindSocket(clientMediaSocket);
+        cachedNetwork.bindSocket(clientMediaSocket);
 
         if (clientIp>0 && clientPort>0) {
             inetSocketAddress = new InetSocketAddress(int2ip(clientIp), clientPort+1);
         } else {
-            String CLIENT_HOST_NAME = "obana.f3322.org";
-            int CLIENT_HOST_PORT = 28001;
-            InetAddress addr = network.getByName(CLIENT_HOST_NAME);
-            inetSocketAddress = new InetSocketAddress(addr, CLIENT_HOST_PORT+1);
+            return  false;
         }
 
-        AppLog.i(TAG, "Client Media Socket connecting ...." + inetSocketAddress);
+        AppLog.i(TAG, "client media socket connecting ...." + inetSocketAddress);
         clientMediaSocket.connect(inetSocketAddress, 5000);
-        AppLog.i(TAG, "Client Meida Socket ---> connected:" + inetSocketAddress);
+        AppLog.i(TAG, "client media socket connected!");
 
         if(!clientMediaSocket.isConnected()){
             AppLog.i(TAG, "--->client media socket connect failed!");
-            b_connected_client = false;
             throw new IOException();
         }
 
-        b_connected_client = true;
         cmdOutputStreamUplink = new DataOutputStream(clientCmdSocket.getOutputStream());//belong to uplink thread
         cmdInputStreamDownlink = new DataInputStream(clientCmdSocket.getInputStream());//cmd downlink
         mediaOutputStreamUplink = new DataOutputStream(clientMediaSocket.getOutputStream());//media uplink
 
-        /*cmd uplink*/
-        if (thread_cmd_uplink == null) {
-            thread_cmd_uplink = new Thread(runnable_cmd_uplink);
-            thread_cmd_uplink.setName("cmd_uplink Thread");
-            thread_cmd_uplink.start();
-        }
-
-        /*cmd downlink*/
-        if (thread_cmd_downlink == null) {
-            thread_cmd_downlink = new Thread(runnable_cmd_downlink);
-            thread_cmd_downlink.setName("cmd_downlink Thread");
-            thread_cmd_downlink.start();
-        }
-
-        /*media uplink*/
-        if (thread_media_uplink == null) {
-            thread_media_uplink = new Thread(runnable_media_uplink);
-            thread_media_uplink.setName("media_uplink Thread");
-            thread_media_uplink.start();//only media output stream is OK
-        }
-        return b_connected_client;
+        mState = STATE_CLIENT_CONNECTED;
+        return true;
     }
 
     public int isCloudSocketConnected() {
@@ -583,6 +588,7 @@ public class CarProxy
 
             stream.write(abyte0);
             stream.flush();
+            AppLog.i(TAG, "send login request successfully!");
         } catch (IOException e) {
 
         }
@@ -669,6 +675,8 @@ public class CarProxy
 
     void parseVideoStartResp(byte abyte0[])  throws IOException {
         int i = ByteUtility.byteArrayToInt(abyte0, 2, 4);
+
+        AppLog.i(TAG, "STEP 1.1: connect to car media, i:" + i);
         if (i >= 0) ConnectToCarMedia(i);//it will send mediaLoginreq after socket connected
     }
 
@@ -688,7 +696,7 @@ public class CarProxy
 
         int op = ByteUtility.byteArrayToInt(abyte0, 4, 2);
         int len = ByteUtility.byteArrayToInt(abyte0, 15, 4);
-        AppLog.d(TAG, "--->receive [" + i + "] bytes data op:" + op + " len:" + len);
+        AppLog.i(TAG, "--->receive [" + i + "] bytes data op:" + op + " len:" + len);
         byte[] content;
         switch(op)
         {
@@ -725,6 +733,7 @@ public class CarProxy
                 abyte0 = CommandEncoder.cmdCloudRegReq();
                 cloudOutputStream.write(abyte0);
                 cloudOutputStream.flush();
+                AppLog.i(TAG, "send reg cmd to cloud successfully! waitng response.....");
             }
         } catch (IOException e){
 
@@ -739,7 +748,7 @@ public class CarProxy
 
         int op = ByteUtility.byteArrayToInt(abyte0, 4, 2);
         int len = ByteUtility.byteArrayToInt(abyte0, 15, 4);
-        AppLog.i(TAG, "--->receive [" + i + "] bytes Cloud data op:" + op + " len:" + len);
+        AppLog.i(TAG, "---> cloud: receive [" + i + "] bytes data. op:" + op + " len:" + len);
         byte[] content;
         switch(op)
         {
@@ -756,12 +765,13 @@ public class CarProxy
     void parseCloudRegResp(byte abyte0[]) throws IOException {
         //get client ip & port
         if (abyte0.length == 8) {
+            mState = STATE_PROXY_REGED;
             clientIp = ByteUtility.byteArrayToInt(abyte0, 0, 4);
             clientPort = ByteUtility.byteArrayToInt(abyte0, 4, 4);
-            AppLog.i(TAG, "proxy reg successfully!");
-            AppLog.i(TAG, "client ip:" + int2ip(clientIp) + " port:" + clientPort);
+            AppLog.i(TAG, "reg to cloud successfully!" );
 
-            mainUI.ConnectToClientViaP2P(0);//use main loop to invoke ConnectToCloud
+            AppLog.i(TAG, "STEP5: connect to client ip:" + int2ip(clientIp) + " port:" + clientPort);
+            mainUI.connectToClient();//use main loop to invoke ConnectToCloud
         }
     }
 
@@ -772,5 +782,22 @@ public class CarProxy
         sb.append((ipInt >> 16) & 0xFF).append(".");
         sb.append((ipInt >> 24) & 0xFF);
         return sb.toString();
+    }
+
+    public String printDebugMsg() {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("Thread CMD_UPLINK :     ").append(state_cmd_uplink == STATE_THREAD_RUNNING?"RUNNING":"IDLE").append("\r\n");
+        sb.append("Thread CMD_DOWNLINK :     ").append(state_cmd_downlink == STATE_THREAD_RUNNING?"RUNNING":"IDLE").append("\r\n");
+        sb.append("Thread CLOUD :     ").append(state_cloud == STATE_THREAD_RUNNING?"RUNNING":"IDLE").append("\r\n");
+        sb.append("Thread MEDIA :     ").append(state_media_uplink == STATE_THREAD_RUNNING?"RUNNING":"IDLE").append("\r\n");
+
+        sb.append("\r\n");
+        sb.append("STATE :    ").append(mState).append(">>>").append(stateDebugMsgs.get(mState)).append("\r\n");
+        return sb.toString();
+    }
+
+    public boolean matchWifiCarAddr(String ip) {
+        return CAR_HOST_ADDR.equals(ip);
     }
 }
