@@ -210,17 +210,17 @@ void *server_thread(void *arg)
             fd1 = newfd;
             recvThreadId1 = pthread_create(&recvThreadWorker1, 0, recv_thread, &fd1);
             pthread_detach(recvThreadWorker1);
-            DBG("new socket fd:%d, recvThreadId:%d \n", fd1, recvThreadId1);
+            DBG("new socket connected, fd:%d \n", fd1);
         } else if ( last_fd == fd1) {
             fd2 = newfd;
             recvThreadId2 = pthread_create(&recvThreadWorker2, 0, recv_thread, &fd2);
             pthread_detach(recvThreadWorker2);
-            DBG("new socket fd:%d, recvThreadId:%d \n", fd2, recvThreadId2);
+            DBG("new socket connected, fd:%d \n", fd2);
         } else {
             fd1 = newfd;
             recvThreadId1 = pthread_create(&recvThreadWorker1, 0, recv_thread, &fd1);
             pthread_detach(recvThreadWorker1);
-            DBG("new socket fd:%d, recvThreadId:%d \n", fd1, recvThreadId1);
+            DBG("new socket connected, fd:%d \n", fd1);
         }
         last_fd = newfd;
 
@@ -246,7 +246,7 @@ void *recv_thread(void *arg)
             int op = bytes2short(cmdBuf + 4);
             int len = bytes2int(cmdBuf + 15);
             int role = findstr(cmdBuf, recv_length, "MO_C", 4) == 0 ? ROLE_CLIENT : ROLE_PROXY;
-            DBG("socket data recved! len:%d, op:%d, role:%d\n", len, op, role);
+            DBG("socket data recved! len:%d, op:%d, role:%d \n", len, op, role);
             if (len == 24 && op == OP_REG_REQ && role == ROLE_CLIENT) {
                 //register signal from client
                 int ipv4 = bytes2int(cmdBuf + 23+16);
@@ -255,15 +255,15 @@ void *recv_thread(void *arg)
                 char buf_ip[INET_ADDRSTRLEN];
                 memset(buf_ip, '\0', sizeof(buf_ip));
                 inet_ntop(AF_INET, &ipv4, buf_ip, sizeof(buf_ip));
-                DBG("recv client reg ip:%s, port:%d  \n", buf_ip, port);
-                mState = STATE_CLIENT_CONNECT;
+                DBG("recv client reg, data:[ip:%s,port:%d]  \n", buf_ip, port);
+                mState = (mState == STATE_CLIENT_REGED ? STATE_CLIENT_REGED : STATE_CLIENT_CONNECT);
 
                 getpeername(clientFd, (struct sockaddr *)&client_socket, (socklen_t*)&length); //sockfd
                 if (ipv4 == client_socket.sin_addr.s_addr) {
                     clientIp = ipv4;
-                    clientPort = client_socket.sin_port;
+                    clientPort = port;
                     mState = STATE_CLIENT_REGED;
-                    DBG("client has be registered, ip&port saved, waiting proxy reg.... \n");
+                    DBG("ip match, client has be registered, [data] saved, waiting proxy .... \n");
                 }
             } else if (op == OP_REG_REQ && role == ROLE_PROXY) {
                 //register signal from proxy
