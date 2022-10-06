@@ -78,8 +78,8 @@ public class WifiCar
     DataInputStream cloudInputStream = null;
     DataOutputStream cloudOutputStream = null;
 
-    InputStream cmdInputStream = null;
-    OutputStream cmdOutputStream = null;
+    DataInputStream cmdInputStream = null;
+    DataOutputStream cmdOutputStream = null;
     DataInputStream mediaReceiverInputStream = null;
     String cameraId;
 
@@ -207,16 +207,20 @@ public class WifiCar
                                 @Override
                                 public void run() {
                                     try {
-                                        cmdInputStream = socket.getInputStream();
-                                        cmdOutputStream = socket.getOutputStream();
-                                        InputStreamReader isr = new InputStreamReader(cmdInputStream);
+                                        cmdInputStream = new DataInputStream(socket.getInputStream());
+                                        cmdOutputStream = new DataOutputStream(socket.getOutputStream());
 
                                         int len;
-                                        while ((len = cmdInputStream.read(cmdBuffer)) != -1) {
+                                        while ((len = cmdInputStream.available()) != -1) {
+                                            cmdInputStream.read(mediaBuffer);
+                                            if (len == 0 || len > CMD_BUF_SIZE) {
+                                                continue;
+                                            }
 
-                                            socket.shutdownInput();
-                                            //do something
-                                            //sendGps();
+
+                                            //process cmd data
+                                            AppLog.i(TAG, "received cmd data, len:" + len);
+                                            //CommandEncoder.parseMediaCommand(instance, mediaBuffer, len);
                                         }
                                     } catch (Exception e) {
 
@@ -256,7 +260,7 @@ public class WifiCar
                                 @Override
                                 public void run() {
                                     try {
-                                        socket.setKeepAlive(true);
+                                        //socket.setKeepAlive(true);
                                         mediaReceiverInputStream = new DataInputStream(socket.getInputStream());
                                         int len;
                                         while ((len = mediaReceiverInputStream.available()) != -1) {
@@ -270,10 +274,11 @@ public class WifiCar
                                                 showStateDebugMsg(mState);
                                             }
                                             //process mjpg data
+                                            AppLog.i(TAG, "received media data, len:" + len);
                                             CommandEncoder.parseMediaCommand(instance, mediaBuffer, len);
                                         }
                                     } catch (Exception e) {
-
+                                        AppLog.e(TAG, "media loop error :" + e.getMessage());
                                     } finally {
                                         synchronized (this) {
                                             //
