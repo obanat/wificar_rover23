@@ -51,10 +51,6 @@ public class CarProxy
     private static final String CAR_HOST_ADDR = "192.168.1.100";
     private static final int CAR_PORT = 80;
 
-    //this sock for media uplink
-    private static final String CAR_MEDIA_HOST_ADDR = "192.168.1.100";
-    private static final int CAR_MEDIA_PORT = 80;
-
     private static final int STATE_THREAD_RUNNING = 1;
     private static final int STATE_THREAD_IDLE = 0;
 
@@ -171,22 +167,23 @@ public class CarProxy
             int count = 0;
             state_cmd_downlink = STATE_THREAD_RUNNING;
             byte tmp[] = null;
+            AppLog.i(TAG, "cmd downlink Thread ---> start running");
             do {
                 try {
                     if (cmdInputStreamDownlink == null) {
-                        Thread.sleep(2000);
+                        Thread.sleep(2000);//cloud socket is not ready
                         continue;
                     }
                     i = cmdInputStreamDownlink.available();//read from cloud
                     
                     if(i <= 0 || i >= CMD_BUF_LEN) {
-                        //AppLog.i(TAG, "--->read dataInputStream loop");
+                        if (i >= CMD_BUF_LEN) AppLog.i(TAG, "--->read dataInputStream exceed buf size:" + i);
                         continue;
                     }
                     if (DBG) AppLog.i(TAG, "cmd downlink Thread ---> read data len:" + i);
-                    cmdInputStreamDownlink.read(cmdDownlinkBuffer, 0, i);
+                    i = cmdInputStreamDownlink.read(cmdDownlinkBuffer);
                 } catch(Exception ioexception) {
-                    ioexception.printStackTrace();
+                    //ioexception.printStackTrace();
                     AppLog.i(TAG, "cmd downlink--->read data from cloud ioexception!, just exit thread!");
                     break;
                 }
@@ -352,6 +349,22 @@ public class CarProxy
         sendCmdLoginReq(cmdOutputStreamDownlink);
 
         return true;
+    }
+
+    public void disConnectCarCmd() {
+        state_cmd_downlink = STATE_THREAD_IDLE;
+        state_cmd_uplink = STATE_THREAD_IDLE;
+
+        if (thread_cmd_uplink != null) {//not use
+            thread_cmd_uplink.interrupt();
+            thread_cmd_uplink = null;
+        }
+
+        if (thread_cmd_downlink != null) {
+            thread_cmd_downlink.interrupt();
+            thread_cmd_downlink= null;
+        }
+        mState = STATE_INIT;
     }
 
     public boolean ConnectToCarMedia(int i) throws IOException {
@@ -588,7 +601,7 @@ public class CarProxy
 
             stream.write(abyte0);
             stream.flush();
-            AppLog.i(TAG, "send login request successfully!");
+            AppLog.i(TAG, "send car cmd login request successfully!");
         } catch (IOException e) {
 
         }
@@ -798,6 +811,8 @@ public class CarProxy
     }
 
     public boolean matchWifiCarAddr(String ip) {
+
         return CAR_HOST_ADDR.equals(ip);
+        //return ip.startsWith("192.168.180.");
     }
 }
