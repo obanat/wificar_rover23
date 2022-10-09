@@ -259,12 +259,13 @@ public class WifiCar
                             new Thread(new Runnable() {
                                 @Override
                                 public void run() {
+                                    AppLog.i(TAG, "media thread running.....");
                                     try {
                                         //socket.setKeepAlive(true);
                                         mediaReceiverInputStream = new DataInputStream(socket.getInputStream());
                                         int len;
                                         while ((len = mediaReceiverInputStream.available()) != -1) {
-                                            mediaReceiverInputStream.read(mediaBuffer);
+                                            len = mediaReceiverInputStream.read(mediaBuffer);
                                             if (len == 0 || len > MEDIA_BUF_SIZE) {
                                                 continue;
                                             }
@@ -274,7 +275,7 @@ public class WifiCar
                                                 showStateDebugMsg(mState);
                                             }
                                             //process mjpg data
-                                            AppLog.i(TAG, "received media data, len:" + len);
+                                            //AppLog.i(TAG, "received media data, len:" + len);
                                             CommandEncoder.parseMediaCommand(instance, mediaBuffer, len);
                                         }
                                     } catch (Exception e) {
@@ -334,7 +335,7 @@ public class WifiCar
     }
 
     public void refreshView(byte[] jpgData) {
-        AppLog.i(TAG, "--->send jpeg data to main activity.... len:" + jpgData.length);
+        //AppLog.i(TAG, "--->send jpeg data to main activity.... len:" + jpgData.length);
 
         WificarMain main = (WificarMain)mainUI;
         main.mJpegView.setCameraBytes(jpgData);
@@ -528,5 +529,27 @@ public class WifiCar
     void showStateDebugMsg(int state) {
         String debugMsg = stateDebugMsgs.get(state);
         ((WificarMain)mainUI).sendDebugMessage(state + ":" + debugMsg);
+    }
+
+    public boolean enableCamera(boolean on) {
+        //enable/disable  media socket for total close media upload stream
+        AppLog.i(TAG, on ? "enable camera ...." : "disable camera ....");
+        
+        byte abyte0[];
+        if (mState < STATE_PROXY_CONNECTED || cmdOutputStream == null) return false;
+
+        try {
+            abyte0 = CommandEncoder.cmdCameraEnable(on);
+            AppLog.i(TAG, "create cmdCameraEnable(34): and send");
+
+            cmdOutputStream.write(abyte0);
+            cmdOutputStream.flush();
+        } catch(IOException ioexception) {
+            AppLog.e(TAG, "IOException when enable/disable camera!");
+            //cmdOutputStream = null;
+            return false;
+        }
+        
+        return true;
     }
 }

@@ -198,7 +198,7 @@ public class MjpegView extends SurfaceView implements SurfaceHolder.Callback {
     }
     
     void redraw(byte[] jpegData) {
-        AppLog.d(TAG, "redraw once....");
+        //AppLog.d(TAG, "redraw once....");
         Rect destRect;
         Canvas c = null;
         Paint p = new Paint();
@@ -210,7 +210,7 @@ public class MjpegView extends SurfaceView implements SurfaceHolder.Callback {
                         Bitmap bm = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.length, opt);
                         destRect = destRect(bm.getWidth(), bm.getHeight());
                         if (destRect != null) {
-                            AppLog.d(TAG, "redraw rect:" + destRect);
+                            //AppLog.d(TAG, "redraw rect:" + destRect);
                             c.drawColor(Color.BLACK);
                             c.drawBitmap(bm, null, destRect, p);
                         }

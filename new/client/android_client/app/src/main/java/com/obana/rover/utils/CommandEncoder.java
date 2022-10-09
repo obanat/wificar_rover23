@@ -40,6 +40,9 @@ public class CommandEncoder
     public static final int VIDEO_FRAMEINTERVAL = 7;
     public static final int VIDEO_START_REQ = 4;
     public static final int VIDEO_START_RESP = 5;
+    public static final int REG_REQ = 32;
+    public static final int REG_RESP = 33;
+    public static final int CAMERA_ONOFF_REQ = 34;
     public static final String WIFICAR_OP = "MO_O";
     public static final String WIFICAR_VIDEO_OP = "MO_V";
     public static final String WIFICAR_MEDIA = "WIFI_MEDIA";
@@ -344,7 +347,17 @@ public class CommandEncoder
         return (new Protocol("MO_O".getBytes(), 4, 1, bytebuffer.array())).output();
     }
 
+    //new added
+    public static byte[] cmdCameraEnable(boolean on)
+        throws IOException
+    {
+        ByteBuffer bytebuffer = ByteBuffer.allocate(4);
+        bytebuffer.put(int8ToByteArray(on?1:0));
 
+        //cmd from client, it should be MO_C
+        return (new Protocol("MO_C".getBytes(), CAMERA_ONOFF_REQ, 1, bytebuffer.array())).output();
+    }
+    
     public static int getPrefixCount(byte abyte0[], int i)
     {
         int j = 0;

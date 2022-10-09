@@ -83,6 +83,7 @@ public class CarProxy
 
     //private int cmdUplinkBufferLen = 0;
     private byte[] bufferedDownlinkCmd = null;
+    private boolean block_uploadMedia = true;
 
     private String cameraId = "";//camera id from cmdLoginResp
     int L1, L2, R1, R2;//for cmdVerifyReq
@@ -105,6 +106,7 @@ public class CarProxy
         mediaUplinkBuffer = new byte[MEDIA_BUF_LEN];
 
         cloudBuffer = new byte[CMD_BUF_LEN];
+        block_uploadMedia = true;
         mState = STATE_INIT;
         AppLog.d(TAG, "new CarProxy created successfully!");
     }
@@ -197,6 +199,7 @@ public class CarProxy
                     * */
                     continue;
                 }
+                parseClientCommand(cmdDownlinkBuffer, i);
                 try {
                     tmp = arrayCopy(cmdDownlinkBuffer, 0, i);
                     cmdOutputStreamDownlink.write(tmp);//send to car
@@ -246,7 +249,7 @@ public class CarProxy
                     break;
                 }
 
-                if (mediaOutputStreamUplink == null) {
+                if (mediaOutputStreamUplink == null || block_uploadMedia) {
                     /*this means client is not ready * */
                     continue;
                 }
@@ -823,7 +826,7 @@ public class CarProxy
 
         int op = ByteUtility.byteArrayToInt(abyte0, 4, 2);
         int len = ByteUtility.byteArrayToInt(abyte0, 15, 4);
-        AppLog.i(TAG, "--->receive [" + i + "] bytes data op:" + op + " len:" + len);
+        AppLog.i(TAG, "--->receive [" + i + "] bytes data from car, op:" + op + " len:" + len);
         byte[] content;
         switch(op)
         {
@@ -848,6 +851,31 @@ public class CarProxy
                 parseVideoStartResp(content);
                 return 1;
 
+        }
+    }
+
+    int parseClientCommand(byte abyte0[], int i){
+
+        int k = findstr(abyte0, "MO_C");//only support cmd from Client
+        if (k < 0) return -1;
+
+        if(i <= 23) return -1;
+
+        int op = ByteUtility.byteArrayToInt(abyte0, 4, 2);
+        int len = ByteUtility.byteArrayToInt(abyte0, 15, 4);
+        AppLog.i(TAG, "--->receive [" + i + "] bytes data from client, op:" + op + " len:" + len);
+        byte[] content;
+        switch(op)
+        {
+            default:
+                return -1;
+
+            case 34: //camera enable/disable
+                //len == 1
+                int on = ByteUtility.byteArrayToInt(abyte0, 23, 1);
+                AppLog.i(TAG, "--->receive camera on:" + on);
+                block_uploadMedia = on > 0 ? false:true;
+                return 1;
         }
     }
 

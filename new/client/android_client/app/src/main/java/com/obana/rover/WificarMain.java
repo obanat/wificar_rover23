@@ -307,10 +307,10 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
             try {
                 switch (mJpegStart) {
                     case 0 :
-                        //WificarMain.this.wifiCar.enableVideo(false, true);
+                        WificarMain.this.wifiCar.enableCamera(false);
                         break;
                     case 1:
-                        //WificarMain.this.wifiCar.enableVideo(true, true);
+                        WificarMain.this.wifiCar.enableCamera(true);
                         break;
                     case 2:
                         wifiCar.switchCamera(true);
