@@ -209,7 +209,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
 
             } else if (!mCarProxy.matchWifiCarAddr(dhcpAddr)) {
                 //connect to spcified ssid
-                WifiConfiguration tempConfig = findSpecifiedSsid(manager, "Rover");
+                WifiConfiguration tempConfig = findSpecifiedSsid(manager, "Rover_");
                 if (tempConfig != null) {
                     AppLog.i(TAG, "---->wifi not connected, enable it ....");
                     boolean enabled = manager.enableNetwork(tempConfig.networkId, true);

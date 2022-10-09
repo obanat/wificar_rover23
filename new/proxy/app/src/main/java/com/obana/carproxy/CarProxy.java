@@ -131,7 +131,6 @@ public class CarProxy
                     if (DBG) AppLog.i(TAG, "cmd uplink Thread ---> read data len:" + i);
                     cmdInputStreamUplink.read(cmdUplinkBuffer, 0, i);
                 } catch(Exception ioexception) {
-                    ioexception.printStackTrace();
                     AppLog.i(TAG, "cmd uplink--->read data from car ioexception!, just exit thread!");
                     break;
                 }
@@ -150,7 +149,9 @@ public class CarProxy
                     cmdOutputStreamUplink.flush();
 
                 } catch(IOException ioexception) {
-                    AppLog.i(TAG, "cmd uplink--->write data to cloud ioexception!, just exit thread!");
+                    AppLog.i(TAG, "cmd uplink--->write data to client ioexception!, just exit thread!");
+                    cmdOutputStreamUplink = null;//make sure no ioexception here again when thread is recreateded.
+                    thread_cmd_uplink = null;
                     break;
                 }
             } while(true);
@@ -184,7 +185,9 @@ public class CarProxy
                     i = cmdInputStreamDownlink.read(cmdDownlinkBuffer);
                 } catch(Exception ioexception) {
                     //ioexception.printStackTrace();
-                    AppLog.i(TAG, "cmd downlink--->read data from cloud ioexception!, just exit thread!");
+                    AppLog.i(TAG, "cmd downlink--->read data from client ioexception!, just exit thread!");
+                    cmdInputStreamDownlink = null;
+                    thread_cmd_downlink = null;//make sure it will recreate thread
                     break;
                 }
 
@@ -202,6 +205,8 @@ public class CarProxy
                     mainUI.sendThreadUpdateMessage(true, count);
                 } catch(IOException ioexception) {
                     AppLog.i(TAG, "cmd downlink--->write data to car ioexception:" + ioexception.toString());
+                    cmdOutputStreamDownlink= null;
+                    thread_cmd_downlink = null;
                     break;
                 }
             } while(true);
@@ -230,11 +235,12 @@ public class CarProxy
                     }
                     i = mediaInputStreamUplink.available();
                     if(i <= 0 || i >= MEDIA_BUF_LEN) {
-                        //AppLog.i(TAG, "--->read dataInputStream loop");
+                        if (i >= MEDIA_BUF_LEN) AppLog.i(TAG, "--->read dataInputStream loop");
                         continue;
                     }
+
+                    i = mediaInputStreamUplink.read(mediaUplinkBuffer);
                     //AppLog.i(TAG, "media uplink Thread ---> read data len:" + i);
-                    mediaInputStreamUplink.read(mediaUplinkBuffer, 0, i);
                 } catch(Exception ioexception) {
                     AppLog.i(TAG, "media uplink--->read data from car ioexception!, just exit thread!");
                     break;
@@ -248,10 +254,13 @@ public class CarProxy
                     byte tmp[] = arrayCopy(mediaUplinkBuffer, 0, i);
                     mediaOutputStreamUplink.write(tmp);//use same uplink socket for both cmd & media
                     mediaOutputStreamUplink.flush();
+                    //AppLog.i(TAG, "media uplink Thread ---> write data len:" + i);
                     count ++;
                     mainUI.sendThreadUpdateMessage(false, count);
                 } catch(IOException ioexception) {
                     AppLog.i(TAG, "media uplink--->write data to cloud ioexception!, just exit thread!");
+                    mediaOutputStreamUplink = null;
+                    cmdOutputStreamUplink = null;//make sure both uplink stream is closed to avoid cmd uplink exception when client app is closed
                     break;
                 }
             } while(true);
@@ -306,17 +315,33 @@ public class CarProxy
             AppLog.i(TAG, "cmd uplink&downlink working, do nothing.");
             return true;
         }
-        if (carCmdSocket!= null) {
-            AppLog.i(TAG, "close previous car cmd socket...");
-            carCmdSocket.close();
+        try {
+            if (carCmdSocket != null) {
+                AppLog.i(TAG, "close previous car cmd socket...");
+                carCmdSocket.close();
+            }
+        } catch (Exception e){
+            AppLog.i(TAG, "clean up resource car cmd met error1.");
         }
-        if (cmdOutputStreamDownlink != null ){
-            cmdOutputStreamDownlink.close();
-            cmdOutputStreamDownlink = null;
+        try {
+            if (cmdOutputStreamDownlink != null) {
+                //cmdOutputStreamDownlink.close();
+                cmdOutputStreamDownlink = null;
+                thread_cmd_downlink.interrupt();
+                thread_cmd_downlink = null;
+            }
+        } catch (Exception e){
+            AppLog.i(TAG, "clean up resource car cmd met error2.");
         }
-        if (cmdInputStreamUplink != null ){
-            cmdInputStreamUplink.close();
-            cmdInputStreamUplink = null;
+        try {
+            if (cmdInputStreamUplink != null) {
+                //cmdInputStreamUplink.close();
+                cmdInputStreamUplink = null;
+                thread_cmd_uplink.interrupt();
+                thread_cmd_uplink = null;
+            }
+        } catch (Exception e){
+            AppLog.i(TAG, "clean up resource car cmd met error3.");
         }
 
         carCmdSocket = SocketFactory.getDefault().createSocket();
@@ -364,18 +389,34 @@ public class CarProxy
             thread_cmd_downlink.interrupt();
             thread_cmd_downlink= null;
         }
+
+        if (thread_media_uplink != null) {
+            thread_media_uplink.interrupt();
+            thread_media_uplink= null;
+        }
+
         mState = STATE_INIT;
     }
 
     public boolean ConnectToCarMedia(int i) throws IOException {
 
-        if (carMediaSocket!= null) {
-            carMediaSocket.close();
+        try {
+            if (carMediaSocket!= null) {
+                carMediaSocket.close();
+            }
+        } catch (Exception e){
+            AppLog.i(TAG, "clean up resource car media met error1.");
         }
 
-        if (mediaInputStreamUplink != null ){
-            mediaInputStreamUplink.close();
-            mediaInputStreamUplink = null;
+        try {
+            if (mediaInputStreamUplink != null ){
+                //mediaInputStreamUplink.close();
+                mediaInputStreamUplink = null;
+                thread_media_uplink.interrupt();
+                thread_media_uplink = null;
+            }
+        } catch (Exception e){
+            AppLog.i(TAG, "clean up resource car media met error2.");
         }
         AppLog.i(TAG, "car media socket connecting .....");
         carMediaSocket = SocketFactory.getDefault().createSocket();
@@ -413,7 +454,9 @@ public class CarProxy
         mState = STATE_CELL_OK;
         AppLog.i(TAG, "STEP 3: start connect to cloud .... ");
         if (state_cloud == STATE_THREAD_RUNNING) {
-            AppLog.i(TAG, "cloud thread working, do nothing.");
+            AppLog.i(TAG, "cloud thread working, just resend reg to cloud.");
+            sendCloudRegReq();//reg to cloud
+            mState = STATE_CLOUD_CONNECTED;
             return true;
         }
 
@@ -422,11 +465,11 @@ public class CarProxy
         }
 
         if (cloudInputStream != null ){
-            cloudInputStream.close();
+            //cloudInputStream.close();
             cloudInputStream = null;
         }
         if (cloudOutputStream != null ){
-            cloudOutputStream.close();
+            //cloudOutputStream.close();
             cloudOutputStream = null;
         }
         cloudSocket = SocketFactory.getDefault().createSocket();
@@ -479,15 +522,15 @@ public class CarProxy
         }
 
         if (cmdOutputStreamUplink != null ){
-            cmdOutputStreamUplink.close();
+            //cmdOutputStreamUplink.close();
             cmdOutputStreamUplink = null;
         }
         if (cmdInputStreamDownlink != null ){
-            cmdInputStreamDownlink.close();
+            //cmdInputStreamDownlink.close();
             cmdInputStreamDownlink = null;
         }
         if (mediaOutputStreamUplink != null ){
-            mediaOutputStreamUplink.close();
+            //mediaOutputStreamUplink.close();
             mediaOutputStreamUplink = null;
         }
 
@@ -501,14 +544,15 @@ public class CarProxy
         clientMediaSocket.setSendBufferSize(MEDIA_BUF_LEN);//important, it make sure jpg data
 
         AppLog.i(TAG, "--->client p2p cmd&media socket connecting .....");
-        if (cachedNetwork ==null) return false;
+        if (cachedNetwork == null) return false;
 
         cachedNetwork.bindSocket(clientCmdSocket);
         InetSocketAddress inetSocketAddress;
 
-        if (clientIp>0 && clientPort>0) {
+        if (clientPort>0) {
             inetSocketAddress = new InetSocketAddress(int2ip(clientIp), clientPort);
         }  else {
+            AppLog.e(TAG, "client cmd cocket error! ip:" + int2ip(clientIp) + " port:" + clientPort);
             return  false;
         }
 
@@ -521,9 +565,22 @@ public class CarProxy
             throw new IOException();
         }
 
+        if (thread_cmd_uplink == null) {
+            thread_cmd_uplink = new Thread(runnable_cmd_uplink);
+            thread_cmd_uplink.setName("cmd_uplink Thread");
+            thread_cmd_uplink.start();
+        }
+
+        if (thread_cmd_downlink == null) {
+            thread_cmd_downlink = new Thread(runnable_cmd_downlink);
+            thread_cmd_downlink.setName("cmd_downlink Thread");
+            thread_cmd_downlink.start();
+        }
+
+
         cachedNetwork.bindSocket(clientMediaSocket);
 
-        if (clientIp>0 && clientPort>0) {
+        if (clientPort>0) {
             inetSocketAddress = new InetSocketAddress(int2ip(clientIp), clientPort+1);
         } else {
             return  false;
@@ -545,7 +602,64 @@ public class CarProxy
         mState = STATE_CLIENT_CONNECTED;
         return true;
     }
+    public boolean disConnectCar() {
 
+        if (carCmdSocket != null) {
+            AppLog.i(TAG, "close previous car cmd socket...");
+            try {
+                carCmdSocket.close();
+            } catch (Exception e) {
+
+            }
+        }
+        try {
+            if (cmdOutputStreamDownlink != null) {
+                //cmdOutputStreamDownlink.close();
+                cmdOutputStreamDownlink = null;
+            }
+        }catch(Exception e){
+        }
+        try {
+            if (cmdInputStreamUplink != null ){
+                //cmdInputStreamUplink.close();
+                cmdInputStreamUplink = null;
+            }
+        }catch(Exception e){
+        }
+        try {
+            thread_cmd_uplink.interrupt();
+        } catch (Exception e){
+
+        }
+        try {
+            thread_cmd_downlink.interrupt();
+        } catch (Exception e){
+
+        }
+
+        //media
+        if (carMediaSocket != null) {
+            AppLog.i(TAG, "close previous car cmd socket...");
+            try {
+                carMediaSocket.close();
+            } catch (Exception e) {
+
+            }
+        }
+        try {
+            if (mediaInputStreamUplink != null) {
+                //mediaInputStreamUplink.close();
+                mediaInputStreamUplink = null;
+            }
+        }catch(Exception e){
+        }
+        try {
+            thread_media_uplink.interrupt();
+        } catch (Exception e){
+
+        }
+        return true;
+    }
     public int isCloudSocketConnected() {
         try {
           if (cloudSocket == null)
@@ -811,8 +925,6 @@ public class CarProxy
     }
 
     public boolean matchWifiCarAddr(String ip) {
-
         return CAR_HOST_ADDR.equals(ip);
-        //return ip.startsWith("192.168.180.");
     }
 }
