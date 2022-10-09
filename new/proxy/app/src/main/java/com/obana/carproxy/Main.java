@@ -118,7 +118,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
                         DhcpInfo dhcpInfo = manager.getDhcpInfo();
                         AppLog.i(TAG, "wifi state change received, dhcp ip addr:" + int2ip(dhcpInfo.gateway));
                         if (mCarProxy.matchWifiCarAddr(int2ip(dhcpInfo.gateway))) {
-                            AppLog.i(TAG, "car wifi connected, ready to connect cmd socket....." + intent);
+                            AppLog.i(TAG, "car wifi connected, ready to connect cmd socket.....");
 
                             //refresh UI
                             Message newMsg = mHandler.obtainMessage(MESSAGE_REFRESH_WIFI,1,0);
@@ -126,13 +126,15 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
                             try {
                                 mCarProxy.connectToCarCmd();
                             } catch (Exception e) {
-
+                                AppLog.e(TAG, "connectToCarCmd error: " + e.getMessage());
                             }
                         } else {
                             //refresh UI
                             Message newMsg = mHandler.obtainMessage(MESSAGE_REFRESH_WIFI,0,0);
                             mHandler.sendMessage(newMsg);
                         }
+                    } else if (state == NetworkInfo.State.DISCONNECTED) {
+                        mCarProxy.disConnectCarCmd();
                     }
                 }
             }
@@ -207,7 +209,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
 
             } else if (!mCarProxy.matchWifiCarAddr(dhcpAddr)) {
                 //connect to spcified ssid
-                WifiConfiguration tempConfig = findSpecifiedSsid(manager, "Pixel");
+                WifiConfiguration tempConfig = findSpecifiedSsid(manager, "Rover");
                 if (tempConfig != null) {
                     AppLog.i(TAG, "---->wifi not connected, enable it ....");
                     boolean enabled = manager.enableNetwork(tempConfig.networkId, true);
@@ -265,7 +267,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
                 try {
                     ret = mCarProxy.ConnectToCloud(network);
                 } catch (Exception e) {
-                    return;
+                    AppLog.i(TAG, "ConnectToCloud error:" + e.getMessage());
                 }
 
             }
