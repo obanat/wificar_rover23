@@ -26,3 +26,25 @@ client：
 小车的控制端，Android app，界面与老版本的app类似，增加了远程连接状态的显示，新版本不支持本地控制，仅支持远程遥控。
 upnp部分使用了开源的upnplibmobile
 
+
+cloud：
+cloud的关键逻辑，接收Client和Proxy的注册指令，根据Client和Proxy上传的设备ID（MAC地址）实现两两配对。
+Client：除了接收MAC地址外，还需要判断Client中携带的upup设备的公网IP地址是否与Client的公网IP地址匹配，最终确定注册状态
+Proxy：根据MAC查找缓存（后续增加超时机制），找到匹配的Client，如果是已注册状态，就给proxy回复注册成功。
+根据上述业务逻辑，Cloud仅需要起一个Socket加上一个接收线程即可，逻辑相对简单。
+
+
+client：
+client是一个
+upnp
+两个Server Socket，
+两个线程
+收到Media后的处理，考虑到internet传输，可能有拆包或者并包现象，设置合适的缓存，并增加并包，拆包处理，确保交给UI绘制的是完整的jpg图片数据
+
+这时，用了一个jpg的绘制控件，感谢github
+
+并且用了一个改进的wheelview控件，实现万向轮的效果，小朋友也能操作，感谢github
+
+同样，为了，增加了debug控制显示，6个状态，需要说明
+
+后续可改进的点，internet传输用H264格式
