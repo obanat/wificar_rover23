@@ -7,7 +7,7 @@ import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
-import org.apache.http.conn.DnsResolver;
+//import org.apache.http.conn.DnsResolver;
 
 import com.obana.carproxy.utils.*;
 import java.io.*;
@@ -336,11 +336,11 @@ public class CarProxy
     //invoke after ipv6 check OK
     int mCmdCount = 0;
     public boolean createServerSocket() {
-        mCloudState = CLOUD_STATE_CELL_OK;
+
         try {
             cloudCmdSocket = new ServerSocket(CMD_PORT);
             cloudMediaSocket = new ServerSocket(MEDIA_PORT);
-
+            mCloudState = CLOUD_STATE_SERVER_OK;
             Thread cmdThread = new Thread(new Runnable() {
                 public void run()//cmd main receive loop
                 {
@@ -451,6 +451,7 @@ public class CarProxy
             });
             mediaThread.setName("mediaThread");
             mediaThread.start();
+            mCloudState = CLOUD_STATE_SERVER_OK;
         } catch (IOException e) {
             AppLog.e(TAG, "create server socket failed!");
             return false;
@@ -574,14 +575,10 @@ public class CarProxy
             }
 
             //start to get cloud ipv6
-            byte[] buf = new byte[200];
+            byte[] buf = new byte[64];
             URL url = null;
             try {
-                InetAddress addr[] = network.getAllByName("checkip.dyndns.com");
-                if (addr.length == 0) return;
-                System.setProperty("java.net.preferIPv6Addresses", Boolean.TRUE.toString());
-                url = new URL("http://checkipv6.dyndns.com"/*addr[0].getHostAddress()*/);
-                new InetAddress[]{DnsResolver.resolve(host, new DisabledCancelCallback())};
+                url = new URL("http://6.ipw.cn");
 
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setConnectTimeout(3000);
@@ -593,27 +590,23 @@ public class CarProxy
 
                 inStream.read(buf);
             } catch (IOException e) {
-                e.printStackTrace();
+                AppLog.e(TAG, "getLocalIPv6, 6.ipw.cn error!");
             }
 
-            String reg = "(?<=:).*?(?=<)";
-            Pattern pattern = Pattern.compile(reg);
-            Matcher matcher = pattern.matcher(new String(buf));
-            if( matcher.find() ){
-                mExternalIpV6Address = matcher.group();
-                if (mExternalIpV6Address.contains(mLocalIpV6Address)) {
+            if( buf.length > 12 ){
+                mExternalIpV6Address = new String(buf);
+                //if (mExternalIpV6Address.equals(mLocalIpV6Address)) {
                     //this means ip match, now create server socket
-                    createServerSocket();
-                    uploadIp();
-                }
+
+                uploadIp();
+                mCloudState = CLOUD_STATE_IP_OK;
+                createServerSocket();
+                //}
             }
             mainUI.updateUI(11);
         } catch (Exception e) {
             AppLog.e(TAG, "check local & external ip, error!");
             mainUI.updateUI(11);
-            mCloudState = CLOUD_STATE_CELL_OK;
-        } finally {
-            AppLog.e(TAG, "check local & external ip, error!");
             mCloudState = CLOUD_STATE_CELL_OK;
         }
     }
