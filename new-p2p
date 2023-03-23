@@ -176,7 +176,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     Runnable wifiRunnable = new Runnable() {
         public void run() {
             AppLog.d(TAG, "STEP1: connecting to car wifi .....");
-            refreshUI(VIEW_ID_CAR_WIFI, false, 0);
+            updateUI(VIEW_ID_CAR_WIFI, false);
             WifiManager manager = (WifiManager)getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             WifiInfo wifiInfo = manager.getConnectionInfo();
             String ssid = wifiInfo.getSSID().toString();
@@ -195,11 +195,11 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
                 mCarProxy.makeWifiReady(null,connectivityManager);
                 //requestWIFINetwork();
 
-                refreshUI(VIEW_ID_CAR_WIFI, true, 0);
+                updateUI(VIEW_ID_CAR_WIFI, true);
             } else if (!mCarProxy.matchWifiCarAddr(dhcpAddr)) {
                 //connect to spcified ssid
                 mCarProxy.setCarReady(false);
-                refreshUI(VIEW_ID_CAR_WIFI, false, 0);
+                updateUI(VIEW_ID_CAR_WIFI, false);
 
                 WifiConfiguration tempConfig = findSpecifiedSsid(manager, "Rover_");
                 if (tempConfig != null) {
@@ -240,9 +240,9 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     }
 
 
-    private static final int VIEW_ID_DEBUG_MSG = 10;
-    private static final int VIEW_ID_MOBILE_NETWORK = 11;
-    private static final int VIEW_ID_CAR_WIFI = 12;
+    public static final int VIEW_ID_DEBUG_MSG = 10;
+    public static final int VIEW_ID_MOBILE_NETWORK = 11;
+    public static final int VIEW_ID_CAR_WIFI = 12;
     private void refreshUI(int viewId, boolean wifiOn, int value) {
         switch (viewId) {
 
@@ -261,8 +261,12 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     }
 
     //for external use
-    public void updateUI(int viewId) {
-        Message newMsg = mHandler.obtainMessage(MESSAGE_REFRESH_CLOUD);
+    public void updateUI(int viewId, boolean wifion) {
+        Message newMsg = mHandler.obtainMessage(viewId);
+
+        if (viewId == VIEW_ID_CAR_WIFI) {
+            newMsg.arg1 = wifion?1:0;
+        }
         mHandler.sendMessage(newMsg);
         //refreshUI(viewId, false, 0);
     }
