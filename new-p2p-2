@@ -7,6 +7,7 @@ import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
+import android.net.NetworkRequest;
 //import org.apache.http.conn.DnsResolver;
 
 import com.obana.carproxy.utils.*;
@@ -19,6 +20,7 @@ import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.regex.Matcher;
@@ -214,15 +216,37 @@ public class CarProxy
         }
     };
 
-    public boolean connectToCarCmd() throws IOException
+    public void requestWIFINetwork() {
+        if (conMgr == null) return;
+        NetworkRequest.Builder builder = new NetworkRequest.Builder();
+        builder.addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+
+        builder.addTransportType(NetworkCapabilities.TRANSPORT_WIFI);
+        NetworkRequest build = builder.build();
+        AppLog.i(TAG, "---> start request wifi network");
+        conMgr.requestNetwork(build, new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                super.onAvailable(network);
+                AppLog.i(TAG, "---> request wifi OK! connectToCarCmd...");
+                try {
+                    connectToCarCmd();
+                } catch (Exception e){
+
+                }
+            }
+        });
+    }
+
+    public int connectToCarCmd() throws IOException
     {
         if (mCarState != CAR_STATE_WIFI_CONNECTED) {
             AppLog.e(TAG, "car wifi state error, just return!");
-            return true;
+            //return 0;
         }
-        if (carCmdSocket != null &&  !carCmdSocket.isClosed()) {
+        if (carCmdSocket != null &&  carCmdSocket.isConnected()) {
             AppLog.i(TAG, "cmd uplink&downlink working, do nothing.");
-            return true;
+            //return CLIENT_EXIT;
         }
         try {
             if (carCmdSocket != null) {
@@ -230,14 +254,14 @@ public class CarProxy
                 carCmdSocket.close();
             }
         } catch (Exception e){
-            AppLog.i(TAG, "clean up resource car cmd met error1.");
+            AppLog.e(TAG, "clean up resource car cmd met error1.");
         }
         try {
             if (carCmdOutputStream != null) {
                 carCmdOutputStream = null;
             }
         } catch (Exception e){
-            AppLog.i(TAG, "clean up resource car cmd met error2.");
+            AppLog.e(TAG, "clean up resource car cmd met error2.");
         }
         try {
             if (carCmdInputStream != null) {
@@ -246,16 +270,18 @@ public class CarProxy
                 thread_cmd_uplink = null;
             }
         } catch (Exception e){
-            AppLog.i(TAG, "clean up resource car cmd met error3.");
+            AppLog.e(TAG, "clean up resource car cmd met error3.");
         }
 
+        InetAddress localAddr = InetAddress.getByName("192.168.1.2");
         carCmdSocket = SocketFactory.getDefault().createSocket();
+        if (wifiNetwork != null) wifiNetwork.bindSocket(carCmdSocket);
         InetSocketAddress inetSocketAddress = new InetSocketAddress(CAR_HOST_ADDR, CAR_PORT);
         carCmdSocket.connect(inetSocketAddress, 5000);
         AppLog.i(TAG, "car cmd Socket ---> connected:" + CAR_HOST_ADDR + " port:" + CAR_PORT);
         carCmdSocket.setSendBufferSize(CMD_BUF_LEN);
         if(!carCmdSocket.isConnected()){
-            AppLog.i(TAG, "--->car cmd socket init failed!");
+            AppLog.e(TAG, "--->car cmd socket init failed!");
             throw new IOException();
         }
 
@@ -271,7 +297,46 @@ public class CarProxy
         //TODO:this should be replaced by init CMD from client
         AppLog.i(TAG, "car cmd Socket create successful!");
         mCarState = CAR_STATE_SOCKET_CONNECTED;
-        return true;
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    cloudCmdInputStream = new DataInputStream(clientSocket.getInputStream());
+                    cloudCmdOutputStream = new DataOutputStream(clientSocket.getOutputStream());
+
+                    int len;
+                    mCmdCount = 0;
+                    while ((len = cloudCmdInputStream.available()) != -1) {
+                        cloudCmdInputStream.read(cmdDownlinkBuffer);
+                        if (len == 0 || len > CMD_BUF_LEN) {
+                            continue;
+                        }
+                        if ("MO_O".equals(CommandEncoder.byteArrayToString(cmdDownlinkBuffer, 0,4))) {
+                            if (CommandEncoder.byteArrayToInt(cmdDownlinkBuffer, 4,6) == 0) {
+                                //this means login command
+                                AppLog.i(TAG, "receive LOGIN command from client!");
+                            }
+                        }
+
+                        //transact cmd data to car
+                        carCmdOutputStream.write(cmdDownlinkBuffer);//send to car
+                        carCmdOutputStream.flush();
+                        mCmdCount ++;
+                        mCloudState = CLOUD_STATE_RUNNING;
+                        AppLog.i(TAG, "transact cmd data from cloud to car, len:" + len);
+                    }
+                } catch (Exception e) {
+                    AppLog.e(TAG, "transact cmd data from cloud to car, error!");
+                    mCloudState = CLOUD_STATE_STOPPED;
+                } finally {
+                    AppLog.e(TAG, "transact cmd data from cloud to car, error!");
+                    mCloudState = CLOUD_STATE_STOPPED;
+                }
+            }
+        }).start();
+
+        return 0;
     }
 
     public void disConnectCarCmd() {
@@ -335,6 +400,8 @@ public class CarProxy
 
     //invoke after ipv6 check OK
     int mCmdCount = 0;
+    private static int CLIENT_EXIT = 100;
+    private Socket clientSocket;
     public boolean createServerSocket() {
 
         try {
@@ -344,6 +411,7 @@ public class CarProxy
             Thread cmdThread = new Thread(new Runnable() {
                 public void run()//cmd main receive loop
                 {
+                    int ret;
                     try {
                         while (true) {
                             //just waiting for client cmd socket connect
@@ -353,45 +421,11 @@ public class CarProxy
                             final String address = socket.getRemoteSocketAddress().toString();
                             AppLog.i(TAG, "one client cmd connected, address:" + address);
 
-                            connectToCarCmd();
+                            clientSocket = socket;
+                            requestWIFINetwork();
 
-                            new Thread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    try {
-                                        cloudCmdInputStream = new DataInputStream(socket.getInputStream());
-                                        cloudCmdOutputStream = new DataOutputStream(socket.getOutputStream());
 
-                                        int len;
-                                        mCmdCount = 0;
-                                        while ((len = cloudCmdInputStream.available()) != -1) {
-                                            cloudCmdInputStream.read(cmdDownlinkBuffer);
-                                            if (len == 0 || len > CMD_BUF_LEN) {
-                                                continue;
-                                            }
-                                            if ("MO_O".equals(CommandEncoder.byteArrayToString(cmdDownlinkBuffer, 0,4))) {
-                                                if (CommandEncoder.byteArrayToInt(cmdDownlinkBuffer, 4,6) == 0) {
-                                                    //this means login command
-                                                    AppLog.i(TAG, "receive LOGIN command from client!");
-                                                }
-                                            }
 
-                                            //transact cmd data to car
-                                            carCmdOutputStream.write(cmdDownlinkBuffer);//send to car
-                                            carCmdOutputStream.flush();
-                                            mCmdCount ++;
-                                            mCloudState = CLOUD_STATE_RUNNING;
-                                            AppLog.i(TAG, "transact cmd data from cloud to car, len:" + len);
-                                        }
-                                    } catch (Exception e) {
-                                        AppLog.e(TAG, "transact cmd data from cloud to car, error!");
-                                        mCloudState = CLOUD_STATE_STOPPED;
-                                    } finally {
-                                        AppLog.e(TAG, "transact cmd data from cloud to car, error!");
-                                        mCloudState = CLOUD_STATE_STOPPED;
-                                    }
-                                }
-                            }).start();
 
                         }
                     } catch (IOException e) {
@@ -537,6 +571,12 @@ public class CarProxy
         mCarState = ready?CAR_STATE_WIFI_CONNECTED:CAR_STATE_INIT;
     }
 
+    private Network wifiNetwork = null;
+    ConnectivityManager conMgr = null;
+    public void makeWifiReady(Network network, ConnectivityManager cm) {
+        wifiNetwork = network;
+        conMgr = cm;
+    }
     private String mLocalIpV6Address;
     private String mExternalIpV6Address;
     public void makeCloudReady(Network network, ConnectivityManager cm) {
@@ -546,12 +586,12 @@ public class CarProxy
         //4. create server socket
         mCloudState = CLOUD_STATE_CELL_OK;
         try {
+            //Network network = cm.getActiveNetwork();
             LinkProperties prop = cm.getLinkProperties(network);
             if (prop == null) {
                 return;
             }
-            NetworkInfo mobileNetworkInfo = cm.getNetworkInfo(ConnectivityManager.TYPE_MOBILE);
-            String extra = mobileNetworkInfo.getExtraInfo();
+
             String interfaceName = prop.getInterfaceName();
             NetworkInterface networkInterface = null;
             mLocalIpV6Address = "";
@@ -578,13 +618,16 @@ public class CarProxy
             byte[] buf = new byte[64];
             URL url = null;
             try {
-                url = new URL("http://6.ipw.cn");
 
+                InetAddress addr = network.getByName("6.ipw.cn");
+                String sAddr = addr.toString();
+                sAddr = sAddr.substring(sAddr.indexOf("/")+1);
+                url = new URL("http://6.ipw.cn") ;
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setConnectTimeout(3000);
                 conn.setRequestMethod("GET");
                 if (conn.getResponseCode() != 200) {
-                    return;
+                    AppLog.e(TAG, "getLocalIPv6, 6.ipw.cn error!0");
                 }
                 InputStream inStream = conn.getInputStream();
 
@@ -598,7 +641,7 @@ public class CarProxy
                 //if (mExternalIpV6Address.equals(mLocalIpV6Address)) {
                     //this means ip match, now create server socket
 
-                uploadIp();
+                uploadIp(network);
                 mCloudState = CLOUD_STATE_IP_OK;
                 createServerSocket();
                 //}
@@ -611,41 +654,37 @@ public class CarProxy
         }
     }
 
-    public void uploadIp() {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                AppLog.i(TAG, "upload ip to cloud ...");
-                try {
-                    String data = "mac=112233&time=" + System.currentTimeMillis()
-                            + "&ipaddr=" + mLocalIpV6Address;
+    public void uploadIp(Network network) {
+        AppLog.i(TAG, "upload ip to cloud ...");
+        try {
+            String data = "mac=112233&time=" + System.currentTimeMillis()
+                    + "&ipaddr=" + mLocalIpV6Address;
 
+            InetAddress addr = network.getByName("i4free.top");
+            String sAddr = addr.toString();
+            sAddr = sAddr.substring(sAddr.indexOf("/")+1);
+            URL url =new URL("http://"+sAddr+":38086/wificar/regClient");
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setDoInput(true);
+            connection.setDoOutput(true);
+            connection.setRequestMethod("POST");
 
-                    URL url =new URL("http://i4free.top:38086/wificar/regClient");
-                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                    connection.setDoInput(true);
-                    connection.setDoOutput(true);
-                    connection.setRequestMethod("POST");
+            connection.setUseCaches(false);
+            connection.connect();
 
-                    connection.setUseCaches(false);
-                    connection.connect();
+            connection.getOutputStream().write(data.getBytes());
+            connection.getOutputStream().flush();
+            connection.getOutputStream().close();
 
-                    connection.getOutputStream().write(data.getBytes());
-                    connection.getOutputStream().flush();
-                    connection.getOutputStream().close();
-
-                    if (connection.getResponseCode() == 200) {
-                        InputStream input = connection.getInputStream();
-                        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(input));
-                        String result = bufferedReader.readLine();
-                        input.close();
-                    }
-
-
-                } catch (IOException iOException) {
-                    iOException.printStackTrace();
-                }
+            if (connection.getResponseCode() == 200) {
+                InputStream input = connection.getInputStream();
+                BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(input));
+                String result = bufferedReader.readLine();
+                input.close();
             }
-        }).start();
+        } catch (IOException iOException) {
+            iOException.printStackTrace();
+        }
     }
+
 }
