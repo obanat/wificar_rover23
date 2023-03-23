@@ -110,12 +110,15 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
                         DhcpInfo dhcpInfo = manager.getDhcpInfo();
                         AppLog.i(TAG, "wifi state change received, dhcp ip addr:" + int2ip(dhcpInfo.gateway));
                         if (mCarProxy.matchWifiCarAddr(int2ip(dhcpInfo.gateway))) {
-                            AppLog.i(TAG, "car wifi connected, ready to connect cmd socket.....");
+                            AppLog.i(TAG, "car wifi connected, ready to request wifi network.....");
 
                             //refresh UI
                             Message newMsg = mHandler.obtainMessage(MESSAGE_REFRESH_WIFI,1,0);
                             mHandler.sendMessage(newMsg);
                             mCarProxy.setCarReady(true);
+                            ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                            mCarProxy.makeWifiReady(null,connectivityManager);
+                            //requestWIFINetwork();
                         } else {
                             //refresh UI
                             Message newMsg = mHandler.obtainMessage(MESSAGE_REFRESH_WIFI,0,0);
@@ -188,6 +191,10 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
 
                 //force update UI
                 mCarProxy.setCarReady(true);
+                ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                mCarProxy.makeWifiReady(null,connectivityManager);
+                //requestWIFINetwork();
+
                 refreshUI(VIEW_ID_CAR_WIFI, true, 0);
             } else if (!mCarProxy.matchWifiCarAddr(dhcpAddr)) {
                 //connect to spcified ssid
@@ -341,7 +348,6 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
         mHandler.sendMessage(msg);
     }
 
-
     public void sendThreadUpdateMessage(boolean isCmd, int value) {
 
     }
@@ -362,12 +368,30 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
         builder.addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR);
         NetworkRequest build = builder.build();
         AppLog.i(TAG, "---> start request cell network");
+        //mCarProxy.makeCloudReady(connectivityManager);
         connectivityManager.requestNetwork(build, new ConnectivityManager.NetworkCallback() {
             @Override
             public void onAvailable(Network network) {
                 super.onAvailable(network);
                 ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
                 mCarProxy.makeCloudReady(network,cm);
+            }
+        });
+    }
+
+    public void requestWIFINetwork() {
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkRequest.Builder builder = new NetworkRequest.Builder();
+        builder.addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+
+        builder.addTransportType(NetworkCapabilities.TRANSPORT_WIFI);
+        NetworkRequest build = builder.build();
+        AppLog.i(TAG, "---> start request wifi network");
+        connectivityManager.requestNetwork(build, new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                super.onAvailable(network);
+                //createcmd
             }
         });
     }
