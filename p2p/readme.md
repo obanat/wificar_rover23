@@ -14,3 +14,7 @@ springboot-wificar：小车的redis服务，负责接受proxy的注册指令，�
 proxy：
 proxy是一个小车的代理，负责连接小车的wifi，并创建两个server socket，等待遥控器的连接，在小车的socket和server socket之间转发数据。
 proxy是安卓的APP，可以运行在任何安卓手机上，实测华为、荣耀、三星均没有问题，要求手机连接小车的Rover打头的热点，同时开启蜂窝数据。
+
+为了缩小体积及节约电量，proxy可以运行于一个摘掉屏幕的Android手机上，实测待机电流10mA以内，运行时电流300mA，以电池3000mAh估算，可以连续运行10个小时。
+
+为了调试方便，proxy有简单的UI，可以查看实时运行状态，摘掉屏幕后，可以通过小车的灯光观察状态。
