@@ -1,0 +1,1 @@
+首先Android手机连接小车的WIFI，Android设备与小车通过Socket双向交互，Android设备同时在运营商蜂窝网络下建立一个server socket，然后等待遥控APP连接上来，Android在两个网卡（就是两个Socket）之间转发数据，扮演了路由器的角色。
