@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:gravity="center_horizontal" android:orientation="vertical" android:background="#ff464646" android:layout_width="wrap_content" android:layout_height="135dp">
+    <RelativeLayout android:orientation="vertical" android:id="@+id/content" android:layout_width="wrap_content" android:layout_height="135dp" android:layout_alignParentTop="true" android:layout_centerHorizontal="true">
+        <TextView android:textSize="20dp" android:textColor="#ffed7512" android:id="@+id/message" android:padding="5dp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DELETE PHOTOT" android:layout_alignParentTop="true"/>
+        <Button android:textColor="#ffffffff" android:id="@+id/positiveButton" android:layout_width="100dp" android:layout_height="40dp" android:layout_marginLeft="30dp" android:layout_marginTop="3dp" android:text="OK" android:singleLine="true" android:layout_below="@+id/message" android:layout_centerHorizontal="true"/>
+        <Button android:textColor="#ffffffff" android:id="@+id/cancelButton" android:layout_width="100dp" android:layout_height="40dp" android:layout_marginLeft="30dp" android:layout_marginTop="3dp" android:text="CANCEL" android:singleLine="true" android:layout_below="@+id/positiveButton" android:layout_centerHorizontal="true"/>
+    </RelativeLayout>
+</LinearLayout>

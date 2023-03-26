@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:background="@drawable/background" android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:textSize="20sp" android:textStyle="bold" android:textColor="#ffffffff" android:gravity="center_horizontal" android:id="@+id/titl" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Photos"/>
+    </LinearLayout>
+    <GridView android:gravity="center" android:id="@+id/photoGallery" android:padding="10dp" android:visibility="visible" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_marginTop="15dp" android:layout_marginBottom="28dp" android:horizontalSpacing="4dp" android:verticalSpacing="15dp" android:stretchMode="columnWidth" android:numColumns="10"/>
+    <GridView android:gravity="center" android:id="@+id/videoGallery" android:padding="10dp" android:visibility="invisible" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_marginTop="15dp" android:layout_marginBottom="28dp" android:horizontalSpacing="4dp" android:verticalSpacing="15dp" android:stretchMode="columnWidth" android:numColumns="10"/>
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_alignParentBottom="true">
+        <Button android:textSize="18sp" android:textColor="#ff000000" android:id="@+id/photo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Photos" android:layout_weight="1"/>
+        <Button android:textSize="18sp" android:textColor="#ff000000" android:id="@+id/video" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Videos" android:layout_weight="1"/>
+    </LinearLayout>
+</RelativeLayout>

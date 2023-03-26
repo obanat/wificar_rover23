@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/parentLayout" android:layout_width="match_parent" android:layout_height="match_parent">
+    <RelativeLayout android:gravity="center" android:id="@+id/controlAbsoluteLayout" android:layout_width="match_parent" android:layout_height="wrap_content">
+        <com.wificar.surface.CameraSurfaceView android:id="@+id/car_camera_surfaceview" android:layout_width="480dp" android:layout_height="360dp"/>
+    </RelativeLayout>
+    <RelativeLayout android:id="@+id/scale_control_linearLayout" android:padding="5dp" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_alignParentTop="true">
+        <Button android:layout_gravity="center_horizontal" android:id="@+id/share_toggle_button" android:background="@drawable/button_share_icon" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginLeft="13dp"/>
+        <Button android:id="@+id/zoom_in_button" android:background="@drawable/button_zoom_in_icon1" android:layout_width="33dp" android:layout_height="33dp" android:layout_marginLeft="68dp"/>
+        <ToggleButton android:id="@+id/g_sensor_toggle_button" android:background="@drawable/g" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginRight="20dp" android:textOn=" " android:textOff=" " android:layout_alignTop="@+id/zoom_out_button" android:layout_alignParentRight="true"/>
+        <Button android:id="@+id/zoom_out_button" android:background="@drawable/button_zoom_out_icon1" android:layout_width="33dp" android:layout_height="33dp" android:layout_marginRight="75dp" android:layout_alignParentRight="true"/>
+        <LinearLayout android:gravity="center" android:id="@+id/RelativeLayoutzoom" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_above="@+id/linearbuttonLayout" android:layout_centerHorizontal="true" android:layout_centerVertical="true">
+            <TextView android:textAppearance="?android:attr/textAppearanceMedium" android:textStyle="bold" android:gravity="center_horizontal" android:id="@+id/screen_ratio_textview" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="100%" android:shadowColor="#ff000000" android:shadowDx="2" android:shadowDy="0" android:shadowRadius="2" android:layout_weight="0.5"/>
+        </LinearLayout>
+        <LinearLayout android:gravity="center" android:id="@+id/RelativeLayoutpower" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_toRightOf="@+id/RelativeLayoutzoom" android:layout_above="@+id/linearbuttonLayout" android:layout_centerHorizontal="true" android:layout_centerVertical="true">
+            <ImageView android:id="@+id/battery_image_view" android:layout_width="31dp" android:layout_height="14dp" android:layout_marginLeft="50dp"/>
+        </LinearLayout>
+    </RelativeLayout>
+    <LinearLayout android:gravity="center_vertical" android:orientation="vertical" android:id="@+id/linearControlLayoutLeft" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="10dp" android:layout_marginTop="0dp" android:layout_marginBottom="10dp" android:layout_alignParentLeft="true" android:layout_centerVertical="true"/>
+    <LinearLayout android:gravity="center_vertical" android:orientation="vertical" android:id="@+id/linearControlLayoutRight" android:visibility="visible" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:layout_marginRight="10dp" android:layout_marginBottom="10dp" android:layout_alignParentRight="true" android:layout_centerVertical="true"/>
+    <RelativeLayout android:gravity="center_horizontal" android:orientation="horizontal" android:id="@+id/linearLayoutCam_video" android:visibility="visible" android:layout_width="match_parent" android:layout_height="160dp" android:layout_alignParentLeft="true" android:layout_alignParentBottom="true">
+        <LinearLayout android:gravity="center" android:id="@+id/linearbuttonLayout" android:background="@drawable/path_menu_bg" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_alignParentBottom="true">
+            <ToggleButton android:id="@+id/light_toggle_button" android:background="@drawable/ir" android:layout_width="66dp" android:layout_height="34dp" android:layout_marginRight="3dp" android:textOn=" " android:textOff=" "/>
+            <ToggleButton android:id="@+id/camup_button" android:background="@drawable/up" android:layout_width="66dp" android:layout_height="34dp" android:layout_marginRight="3dp" android:textOn=" " android:textOff=" "/>
+            <ToggleButton android:id="@+id/record_toggle_button" android:background="@drawable/record_path" android:layout_width="66dp" android:layout_height="34dp" android:layout_marginRight="3dp" android:textOn=" " android:textOff=" "/>
+            <Button android:id="@+id/play_toggle_button" android:background="@drawable/play_path" android:layout_width="66dp" android:layout_height="34dp" android:layout_marginRight="3dp" android:textOn=" " android:textOff=" "/>
+            <Button android:id="@+id/talk_button" android:background="@drawable/talk" android:layout_width="66dp" android:layout_height="34dp" android:layout_marginRight="3dp"/>
+            <ToggleButton android:id="@+id/mic_toggle_button" android:background="@drawable/mic" android:layout_width="66dp" android:layout_height="34dp" android:layout_marginRight="3dp" android:textOn=" " android:textOff=" "/>
+            <ToggleButton android:id="@+id/led_toggle_button" android:background="@drawable/led" android:layout_width="66dp" android:layout_height="34dp" android:layout_marginRight="3dp" android:textOn=" " android:textOff=" "/>
+        </LinearLayout>
+        <LinearLayout android:gravity="center" android:id="@+id/linearLayoutcamera_video" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="5dp" android:layout_above="@+id/linearbuttonLayout" android:layout_centerHorizontal="true" android:layout_centerVertical="true">
+            <Button android:id="@+id/take_picture_button" android:background="@drawable/camera1" android:layout_width="66dp" android:layout_height="34dp" android:layout_marginRight="5dp"/>
+            <ToggleButton android:id="@+id/video_toggle_button" android:background="@drawable/video1" android:layout_width="66dp" android:layout_height="34dp" android:textOn=" " android:textOff=" "/>
+        </LinearLayout>
+        <ToggleButton android:id="@+id/setting_button" android:background="@drawable/setting" android:layout_width="23dp" android:layout_height="23dp" android:layout_marginRight="4dp" android:layout_marginBottom="0dp" android:textOn=" " android:textOff=" " android:layout_above="@+id/linearbuttonLayout" android:layout_alignParentRight="true"/>
+        <ImageView android:id="@+id/no_sound" android:background="@drawable/no_voice" android:clickable="false" android:layout_width="21dp" android:layout_height="22dp" android:layout_marginLeft="58dp" android:layout_toRightOf="@+id/linearLayoutcamera_video" android:layout_alignBottom="@+id/linearLayoutcamera_video"/>
+        <RelativeLayout android:id="@+id/linearlayoutleftcamera" android:visibility="visible" android:layout_width="30dp" android:layout_height="110dp" android:layout_marginRight="55dp" android:layout_toLeftOf="@+id/linearLayoutcamera_video" android:layout_above="@+id/linearbuttonLayout">
+            <com.wificar.surface.Camera_UD_SurfaceView android:id="@+id/Car_Camera_UD_SurfaceView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentBottom="true" android:layout_centerHorizontal="true"/>
+        </RelativeLayout>
+    </RelativeLayout>
+</RelativeLayout>
