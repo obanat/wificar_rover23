@@ -120,7 +120,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     }
 
     private void refreshGLView() {
-        if (wifiCar.isVersion20()) {
+        if (1>2/*wifiCar.isVersion20()*/) {
             mJpegView.setVisibility(View.VISIBLE);
             mH264View.setVisibility(View.GONE);
         } else {
@@ -157,7 +157,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                 try {
                     result = WificarMain.this.wifiCar.setCmdConnect();
                 } catch (IOException e) {
-
+                    AppLog.e(TAG, "--->connectRunnable. e:" + e.getMessage());
                 }
                 if (result) {
                     AppLog.d(TAG, "--->wificar socket connect Succuess!");
@@ -240,13 +240,13 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         switch (param1Message.what) {
             case MESSAGE_CONNECT_TO_CAR_FAIL:
                 if (SHOW_DEBUG_MESSAGE)
-                    Toast.makeText(WificarMain.this, "failed to connect!", 0).show();
+                    Toast.makeText(WificarMain.this, "failed to connect!", Toast.LENGTH_SHORT).show();
                 handled = true;
                 break;
             case MESSAGE_MAKE_TOAST:
                 if (SHOW_DEBUG_MESSAGE) {
                     String msg = param1Message.getData().getString(BUNDLE_KEY_TOAST_MSG);
-                    Toast.makeText(WificarMain.this, msg, 0).show();
+                    Toast.makeText(WificarMain.this, msg, Toast.LENGTH_SHORT).show();
                 }
                 handled = true;
                 break;
