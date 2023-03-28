@@ -132,6 +132,9 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     public boolean onKeyDown(int paramInt, KeyEvent paramKeyEvent) {
         Log.i(TAG, "onKeyDown key=" + paramInt + " event=" + paramKeyEvent);
         Toast.makeText(this, "k:" + paramInt + " k:" + paramKeyEvent.getKeyCode(), Toast.LENGTH_SHORT).show();
+        if (paramInt == 4) {
+            finish();
+        }
         return super.onKeyDown(paramInt, paramKeyEvent);
     }
 
@@ -279,7 +282,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
 
     private Thread CamMovingTask = new Thread() {
         public void run() {
-            AppLog.i(TAG, "run camera move in 100ms");
+            AppLog.i(TAG, "run camera move cmd:" + mCameraControl);
             try {
                 wifiCar.camMove(mCameraControl);
             } catch (IOException iOException) {
@@ -357,7 +360,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                 camContrlLastTimeCon = System.currentTimeMillis();
             } else if (status == 200) {//move
                 double now = System.currentTimeMillis();
-                if (now - camContrlLastTimeCon > TIME_INTERVAL_MS) {
+                if (now - camContrlLastTimeCon > 100) {
                     if (wifiCar.isVersion20()) {
                         sendCamMoveCommand20(status, angle, distance);
                     } else {
@@ -377,7 +380,19 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     };
 
     void sendCamMoveCommand20(int status, float angle, float distance) {
+        if ((angle >= 0 && angle <= 45) || (angle >= 315 && angle <= 360)) {
+            mCameraControl = 0;//up
+        } else if (angle >= 135 && angle <= 225) {
+            mCameraControl = 2;//down
+        } else {
+            mCameraControl = 1;//other
+        }
 
+        if (status == 300) {
+            mCameraControl = 1;//stop
+        }
+
+        (new Thread(CamMovingTask)).start();
     }
 
     void sendCamMoveCommand30(int status, float angle, float distance) {

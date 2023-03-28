@@ -226,10 +226,10 @@ public class CommandEncoder
         return (new Protocol("MO_O".getBytes(), 14, 1, bytebuffer.array())).output();
     }
 
-    public static byte[] cmdCameraControlReqV3(int i) throws IOException {
+    public static byte[] cmdCameraControlReqV2(int i) throws IOException {
         ByteBuffer bytebuffer = ByteBuffer.allocate(1);
         bytebuffer.put(int8ToByteArray(i));
-        return (new Protocol("MO_O".getBytes(), CAMERA_CONTROL_REQ_V3, 1, bytebuffer.array())).output();
+        return (new Protocol("MO_O".getBytes(), DECODER_CONTROL_REQ, 1, bytebuffer.array())).output();
     }
 
     public static byte[] cmdDeviceControlReq(int i, int j)
@@ -665,16 +665,8 @@ public class CommandEncoder
                     //add WIFICAR_MEDIA for server side processing 
                     wificar.refreshView(arrayCopy(mediaRecvBuf, 36, mediaRecvBuf.length - 36));
                 // Audio bytes: call processing routine
-                } else{
-                    /*
-                    //ignor audio data
-                    audsize = bytes_to_uint(mediabytes, 36)
-                    sampend = 40 + audsize
-                    offset = bytes_to_short(mediabytes, sampend)
-                    index  = ord(mediabytes[sampend+2])
-                    pcmsamples = decodeADPCMToPCM(mediabytes[40:sampend], offset, index)
-                    self.rover.processAudio(pcmsamples, timestamp) 
-                    */ 
+                } else if ((int)mediaRecvBuf[4] == 3){//h264
+                    wificar.refreshH264View(arrayCopy(mediaRecvBuf, 36, mediaRecvBuf.length - 36), mediaRecvBuf.length - 36 ,0);
                 }
                 // Start over with new bytes    
                 //mediaRecvBuf = buf[k:]

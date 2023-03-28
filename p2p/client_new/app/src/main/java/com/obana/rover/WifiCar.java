@@ -383,9 +383,7 @@ public class WifiCar
         if (!bwificarConnected) return false;
 
         try {
-            abyte0 = CommandEncoder.cmdCameraControlReqV3(i);
-            AppLog.d(TAG, (new StringBuilder("cmdCameraControlReq(14):")).append(i).toString());
-
+            abyte0 = CommandEncoder.cmdCameraControlReqV2(i);
             dataOutputStream.write(abyte0);
             dataOutputStream.flush();
         } catch(Exception ioexception) {

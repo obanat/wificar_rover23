@@ -84,9 +84,8 @@
 		<activity
 			android:label="rover2#3"
 			android:name="com.obana.rover.WificarMain"
-			
-			android:exported="true"
-			>
+			android:keepScreenOn="true"
+			android:exported="true" >
 			<intent-filter>
 				<action android:name="android.intent.action.MAIN">
 				</action>
