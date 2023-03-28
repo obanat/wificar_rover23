@@ -1,6 +1,13 @@
 package com.obana.carproxy;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
+import android.media.MediaFormat;
+import android.media.MediaMuxer;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
@@ -17,8 +24,11 @@ import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CountDownLatch;
 
 import javax.net.SocketFactory;
 
@@ -32,6 +42,9 @@ public class CarProxy
     //this sock for uplink & downlink command
     private static final String CAR_HOST_ADDR = "192.168.1.100";
     private static final int CAR_PORT = 80;
+
+    private static final int USE_H264 = 1;
+
 
     private static final int CMD_BUF_LEN = 1024;
     private static final int MEDIA_BUF_LEN = (64*1024);
@@ -95,6 +108,7 @@ public class CarProxy
     Thread thread_cmd_downlink = null;
     Thread thread_media_uplink = null;
     Thread thread_media_downlink = null;
+    Thread thread_media_codec = null;
 
     public CarProxy(Activity activity)
     {
@@ -109,7 +123,68 @@ public class CarProxy
         mCloudState = CLOUD_STATE_INIT;
         AppLog.i(TAG, "new CarProxy created successfully!");
     }
+    private android.graphics.BitmapFactory.Options mBitmapOpt;
+    int mWidth;//mjpg frame width
+    int mHeight;
+    private static final String MIME_TYPE = "video/avc"; // H.264 Advanced Video Coding
+    private static final int BIT_RATE = 240000;
+    private static final int I_FRAME_INTERVAL = 2;
 
+
+    void initMediaCodec() {
+        //
+        mBitmapOpt = new android.graphics.BitmapFactory.Options();
+        mBitmapOpt.inDither = true;
+        mBitmapOpt.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565;
+
+        mWidth = 320;
+        mHeight = 240;//rover2 320x240; rover3 640x480
+
+        MediaCodecInfo codecInfo = selectCodec(MIME_TYPE);
+        if (codecInfo == null) {
+            AppLog.e(TAG, "Unable to find an appropriate codec for " + MIME_TYPE);
+            return;
+        }
+        AppLog.i(TAG, "found codec: " + codecInfo.getName());
+        int colorFormat;
+        try {
+            colorFormat = selectColorFormat(codecInfo, MIME_TYPE);
+        } catch (Exception e) {
+            colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar;
+        }
+
+        try {
+            mediaCodec = MediaCodec.createByCodecName(codecInfo.getName());
+        } catch (IOException e) {
+            AppLog.e(TAG, "Unable to create MediaCodec " + e.getMessage());
+            return;
+        }
+
+        MediaFormat mediaFormat = MediaFormat.createVideoFormat(MIME_TYPE, mWidth, mHeight);
+        mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
+        mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
+        mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
+        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
+        mediaCodec.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        mediaCodec.start();
+
+        AppLog.i(TAG, "Initialization media codec complete. waiting start encoder...");
+    }
+
+    public void stopEncoding() {
+        if (mediaCodec == null) {
+            AppLog.d(TAG, "Failed to stop encoding since it never started");
+            return;
+        }
+        AppLog.d(TAG, "Stopping encoding...");
+
+        mH264EncodeRunning = false;
+        synchronized (mFrameSync) {
+            if ((mNewFrameLatch != null) && (mNewFrameLatch.getCount() > 0)) {
+                mNewFrameLatch.countDown();
+            }
+        }
+    }
     /*
     * thread for transact cmd from car to client
     * init state:SOCKET(103)
@@ -142,7 +217,9 @@ public class CarProxy
                     AppLog.i(TAG, "cmd uplink--->read data from car ioexception!, just exit thread!");
                     break;
                 }
-
+                if (cmdUplinkBuffer[0] == 77 && cmdUplinkBuffer[1] == 79) {
+                    AppLog.i(TAG, "====resp op:" + ByteUtility.byteArrayToInt(cmdUplinkBuffer, 4, 2));
+                }
                 try {
 
                     //parseCommand(cmdUplinkBuffer, i);--no need to parse,just passthrough
@@ -151,7 +228,8 @@ public class CarProxy
                     }
 
                     //forward cmd to client
-                    cloudCmdOutputStream.write(cmdUplinkBuffer);
+                    byte tmp[] = arrayCopy(cmdUplinkBuffer, 0, i);
+                    cloudCmdOutputStream.write(tmp);
                     cloudCmdOutputStream.flush();
                     AppLog.i(TAG, "transact cmd data from car to cloud, len:" + i);
                     mCmdUpLinkCount++;
@@ -182,20 +260,18 @@ public class CarProxy
                 AppLog.i(TAG, "cmd downlink Thread ---> start running");
 
                 while ((len = cloudCmdInputStream.read(cmdDownlinkBuffer)) != -1) {
-                    AppLog.i(TAG, "receive cmd data from cloud, len::::" + len);
+                    //AppLog.i(TAG, "receive cmd data from cloud, len::::" + len);
                     if (len == 0 || len > CMD_BUF_LEN) {
                         continue;
                     }
                     AppLog.i(TAG, "receive cmd data from cloud, len:" + len);
-                    if ("MO_O".equals(CommandEncoder.byteArrayToString(cmdDownlinkBuffer, 0,4))) {
-                        if (CommandEncoder.byteArrayToInt(cmdDownlinkBuffer, 4,6) == 0) {
-                            //this means login command
-                            AppLog.i(TAG, "receive LOGIN command from client!");
-                        }
+                    if (cmdDownlinkBuffer[0] == 77 && cmdDownlinkBuffer[1] ==79) {
+                        AppLog.i(TAG, "====req op:" + ByteUtility.byteArrayToInt(cmdDownlinkBuffer, 4, 2));
                     }
 
                     //transact cmd data to car
-                    carCmdOutputStream.write(cmdDownlinkBuffer);//send to car
+                    byte[] tmp = arrayCopy(cmdDownlinkBuffer, 0, len);
+                    carCmdOutputStream.write(tmp);//send to car
                     carCmdOutputStream.flush();
                     mCmdDownLinkCount ++;
                     mCloudState = CLOUD_STATE_RUNNING;
@@ -241,6 +317,12 @@ public class CarProxy
                     }
 
                     carMediaInputStream.read(mediaUplinkBuffer);
+
+                    if (USE_H264 > 0) {//uplink meida will be done until media codec finished
+                        parseMedia(mediaUplinkBuffer, i);
+                        continue;
+                    }
+
                     AppLog.i(TAG, "media uplink Thread ---> read data from car len:" + i);
                 } catch(Exception ioexception) {
                     AppLog.i(TAG, "media uplink--->read data from car ioexception!, just exit thread!");
@@ -252,9 +334,10 @@ public class CarProxy
                     continue;
                 }
                 try {
-                    cloudMediaOutputStream.write(mediaUplinkBuffer);//use same uplink socket for both cmd & media
+                    byte tmp[] = arrayCopy(mediaUplinkBuffer, 0, i);
+                    cloudMediaOutputStream.write(tmp);//use same uplink socket for both cmd & media
                     cloudMediaOutputStream.flush();
-                    AppLog.i(TAG, "media uplink Thread ---> write data to cloud len:" + i);
+                    //AppLog.i(TAG, "media uplink Thread ---> write jpg data to cloud len:" + i);
                     mMediaCount ++;
                 } catch(IOException ioexception) {
                     AppLog.i(TAG, "media uplink--->write data to cloud ioexception!, just exit thread!");
@@ -266,6 +349,216 @@ public class CarProxy
         }
     };
 
+    boolean mH264EncodeRunning = false;
+    private MediaCodec mediaCodec;
+
+    private Object mFrameSync = new Object();
+    private CountDownLatch mNewFrameLatch;
+    private int mGenerateIndex = 0;
+    private static final int FRAME_RATE = 10;
+    private int mTrackIndex;
+
+    Runnable runnable_media_codec = new Runnable() {
+        public void run()//this is main receive loop
+        {
+            mH264EncodeRunning = true;
+            byte[] jpegData = null;
+            int errorCounter = 0;
+
+            while (mH264EncodeRunning) {
+                if (YUVQueue.size() > 0) {
+                    jpegData = YUVQueue.poll();
+
+                    if (jpegData ==  null) {
+                        synchronized (mFrameSync) {
+                            mNewFrameLatch = new CountDownLatch(1);
+                        }
+
+                        try {
+                            mNewFrameLatch.await();
+                        } catch (InterruptedException e) {}
+
+                        jpegData = YUVQueue.poll();
+                    }
+
+                    if (jpegData == null) continue;
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.length, mBitmapOpt);
+
+                    byte[] byteConvertFrame = getNV21(bitmap.getWidth(), bitmap.getHeight(), bitmap);
+
+                    //AppLog.i(TAG, "media codec Thread ---> w:" + bitmap.getWidth() + " h:" + bitmap.getHeight());
+
+                    long TIMEOUT_USEC = 500000;
+                    int inputBufIndex = mediaCodec.dequeueInputBuffer(TIMEOUT_USEC);
+                    long ptsUsec = computePresentationTime(mGenerateIndex, FRAME_RATE);
+                    if (inputBufIndex >= 0) {
+                        final ByteBuffer inputBuffer = mediaCodec.getInputBuffer(inputBufIndex);
+                        inputBuffer.clear();
+                        inputBuffer.put(byteConvertFrame);
+                        mediaCodec.queueInputBuffer(inputBufIndex, 0, byteConvertFrame.length, ptsUsec, 0);
+                        mGenerateIndex++;
+                    }
+                    MediaCodec.BufferInfo mBufferInfo = new MediaCodec.BufferInfo();
+                    int encoderStatus = mediaCodec.dequeueOutputBuffer(mBufferInfo, TIMEOUT_USEC);
+                    if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                        // no output available yet
+                        AppLog.e(TAG, "No output from encoder available");
+                    } else if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        // not expected for an encoder
+                        AppLog.e(TAG, "INFO_OUTPUT_FORMAT_CHANGED");
+                    } else if (encoderStatus < 0) {
+                        AppLog.e(TAG, "unexpected result from encoder.dequeueOutputBuffer: " + encoderStatus);
+                    } else if (mBufferInfo.size != 0) {
+                        ByteBuffer encodedData = mediaCodec.getOutputBuffer(encoderStatus);
+                        if (encodedData == null) {
+                            AppLog.e(TAG, "encoderOutputBuffer " + encoderStatus + " was null");
+                        } else {
+                            encodedData.position(mBufferInfo.offset);
+                            encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
+                            //mediaMuxer.writeSampleData(mTrackIndex, encodedData, mBufferInfo);
+
+                            //send data to media uplink stream
+                            if (cloudMediaOutputStream == null) continue;
+                            try {
+                                byte[] buf = new byte[encodedData.remaining() + 36];
+                                encodedData.get(buf, 36, encodedData.remaining());   //bb.get(b) is OK
+                                buf[0] = 'M';buf[1] = 'O';buf[2] = '_';buf[3] = 'V';
+                                buf[4] = 3;
+                                cloudMediaOutputStream.write(buf);//use same uplink socket for both cmd & media
+                                cloudMediaOutputStream.flush();
+                                mMediaCount ++;
+                                errorCounter = 0;
+                                AppLog.i(TAG, "media codec Thread ---> write h264 data to cloud len:" + buf.length + " mMediaCount:" + mMediaCount);
+                            } catch (IOException e) {
+                                AppLog.e(TAG, "uplink output stream write excepiton! e: " + e.getMessage());
+                                errorCounter++;
+                                if (errorCounter > 20) break;
+                            }
+                            mediaCodec.releaseOutputBuffer(encoderStatus, false);
+                        }
+                    }
+                }
+            }//finish loop
+
+
+            releaseCodec();
+        }
+    };
+
+    private void releaseCodec() {
+        if (mediaCodec != null) {
+            mediaCodec.stop();
+            mediaCodec.release();
+            mediaCodec = null;
+            AppLog.i(TAG,"RELEASE CODEC");
+        }
+    }
+
+    static byte mediaRecvBuf[] = new byte[0];
+    void parseMedia(byte[] buf, int i) {
+        int k = findstr(buf, i, "MO_V");
+
+        if (k  >= 0) {
+            // Already have media bytes?
+            if (mediaRecvBuf != null && mediaRecvBuf.length > 0) {
+
+                //add to media bytes up through start of new
+                //mediaRecvBuf += buf[0:k];
+                mediaRecvBuf = arrayCopy2(mediaRecvBuf, 0, mediaRecvBuf.length,
+                        buf, 0, k);
+
+                // Both video and audio messages are time-stamped in 10ms units
+                //timestamp = bytes_to_uint(media bytes, 23)
+
+                if ((int)mediaRecvBuf[4] == 1) {//1-vedio;2-audio
+                    //video bytes: call h264 codec processing routine
+                    addToH264VideoQueue(arrayCopy(mediaRecvBuf, 36, mediaRecvBuf.length - 36), mediaRecvBuf.length - 36);
+                    // Audio bytes: call processing routine
+                } else if ((int)mediaRecvBuf[4] == 2){
+                    addToH264AudioQueue(arrayCopy(mediaRecvBuf, 36, mediaRecvBuf.length - 36), mediaRecvBuf.length - 36);
+                }
+                //mediaRecvBuf = buf[k:]
+                mediaRecvBuf = arrayCopy(buf, k, i/*buf.length*/ - k);
+
+                // No media bytes yet: start with new bytes
+            }else{
+                //mediaRecvBuf = buf[k:]
+                mediaRecvBuf = arrayCopy(buf, k, i/*buf.length*/ - k);
+            }
+        } else{
+            //mediaRecvBuf += buf;
+            //mediaRecvBuf should start with MO_V
+            mediaRecvBuf = arrayCopy2(mediaRecvBuf, 0, mediaRecvBuf.length,
+                    buf, 0, i/*buf.length*/);
+
+        }
+    }
+
+    private static final int YUV_QUEUE_SIZE = 50;
+    public static ArrayBlockingQueue<byte[]> YUVQueue = new ArrayBlockingQueue<byte[]>(YUV_QUEUE_SIZE);
+
+    //add mjpg data to h264 codec queue
+    void addToH264VideoQueue(byte[] buf, int len) {
+
+        if (YUVQueue.size() >= YUV_QUEUE_SIZE) {
+            YUVQueue.poll();
+        }
+        YUVQueue.add(buf);
+        synchronized (mFrameSync) {
+            if ((mNewFrameLatch != null) && (mNewFrameLatch.getCount() > 0)) {
+                mNewFrameLatch.countDown();
+            }
+        }
+    }
+
+    //add audio data to h264 codec queue
+    void addToH264AudioQueue(byte[] buf, int len) {
+
+    }
+
+
+    private static int findstr(byte[] buf, int bufLen, String str) {
+        int strLen = str.length();
+        if (strLen == 4) {
+            byte[] str2byte = str.getBytes();
+
+            for (int i = 0; i < bufLen -3; i++) {
+                if (buf[i] == str2byte[0] && buf[i+1] == str2byte[1]
+                        && buf[i+2] == str2byte[2] && buf[i+3] == str2byte[3]) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static byte[] arrayCopy(byte[] src, int start, int len) {
+        if (src == null || start < 0 || len <= 0 || start + len > src.length) {
+            return null;
+        }
+        byte[] ret = new byte[len];
+        System.arraycopy(src, start, ret, 0, len);
+        return ret;
+    }
+
+    private static byte[] arrayCopy2(byte[] src1, int start1, int len1, byte[] src2, int start2, int len2) {
+        if (src1 == null || start1 < 0 ) {
+            return null;
+        }
+
+        if (src2 == null || start2 < 0 ) {
+            return null;
+        }
+        if (len1 + len2 <= 0) {
+            return null;
+        }
+        byte ret[] = new byte[len1 + len2];
+        System.arraycopy(src1, start1, ret, 0, len1);
+        System.arraycopy(src2, start2, ret, len1, len2);
+        return ret;
+    }
+
+
     /*
     * thread for transact media cmd(loginin )from client to car
     * no ui debug state
@@ -275,13 +568,14 @@ public class CarProxy
             try {
                 int len;
                 AppLog.i(TAG, "media downlink Thread ---> start running");
-                while ((len = cloudMediaInputStream.available()) != -1) {
-                    cloudMediaInputStream.read(mediaDownlinkBuffer);
+                while ((len = cloudMediaInputStream.read(mediaDownlinkBuffer)) != -1) {
+
                     if (len == 0 || len > CMD_BUF_LEN) {//mediaDownlinkBuffer is short
                         continue;
                     }
                     //transact cmd data to car
-                    carMediaOutputStream.write(mediaDownlinkBuffer);//send to car
+                    byte tmp[] = arrayCopy(mediaDownlinkBuffer, 0, len);
+                    carMediaOutputStream.write(tmp);//send to car
                     carMediaOutputStream.flush();
                     AppLog.i(TAG, "transact media data from cloud to car, len:" + len);
                 }
@@ -422,6 +716,12 @@ public class CarProxy
                 thread_media_downlink.interrupt();
                 thread_media_downlink = null;
             }
+
+            if (thread_media_codec != null ){
+                thread_media_codec.interrupt();
+                thread_media_codec = null;
+            }
+
             carMediaInputStream = null;
             carMediaOutputStream = null;
         } catch (Exception e){
@@ -433,7 +733,7 @@ public class CarProxy
         InetSocketAddress addr = new InetSocketAddress(CAR_HOST_ADDR, CAR_PORT);
 
         //use previous cached wifi network
-        if (mWifiNetwork != null) mWifiNetwork.bindSocket(carCmdSocket);
+        if (mWifiNetwork != null) mWifiNetwork.bindSocket(carMediaSocket);
         carMediaSocket.connect(addr, 5000);
 
         if(!carMediaSocket.isConnected()){
@@ -457,6 +757,13 @@ public class CarProxy
             thread_media_downlink = new Thread(runnable_media_downlink);
             thread_media_downlink.setName("media_downlink Thread");
             thread_media_downlink.start();
+        }
+
+        initMediaCodec();
+        if (thread_media_codec == null) {
+            thread_media_codec = new Thread(runnable_media_codec);
+            thread_media_codec.setName("media_codec Thread");
+            thread_media_codec.start();
         }
         return true;
     }
@@ -517,7 +824,7 @@ public class CarProxy
                             ConnectToCarMedia();
                         }
                     } catch (IOException e) {
-                        AppLog.e(TAG, "Listen cloud media server socket Exception!");
+                        AppLog.e(TAG, "Listen cloud media server socket Exception! e:" + e.getMessage());
                     }
                 }
             });
@@ -728,4 +1035,89 @@ public class CarProxy
         }
     }
 
+    private byte[] getNV21(int inputWidth, int inputHeight, Bitmap scaled) {
+        int[] argb = new int[inputWidth * inputHeight];
+        scaled.getPixels(argb, 0, inputWidth, 0, 0, inputWidth, inputHeight);
+        byte[] yuv = new byte[inputWidth * inputHeight * 3 / 2];
+        encodeYUV420SP(yuv, argb, inputWidth, inputHeight);
+        scaled.recycle();
+        return yuv;
+    }
+
+    private void encodeYUV420SP(byte[] yuv420sp, int[] argb, int width, int height) {
+        final int frameSize = width * height;
+        int yIndex = 0;
+        int uvIndex = frameSize;
+
+        int a, R, G, B, Y, U, V;
+        int index = 0;
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                a = (argb[index] & 0xff000000) >> 24; // a is not used obviously
+                R = (argb[index] & 0xff0000) >> 16;
+                G = (argb[index] & 0xff00) >> 8;
+                B = (argb[index] & 0xff) >> 0;
+
+                Y = ((66 * R + 129 * G + 25 * B + 128) >> 8) + 16;
+                U = ((-38 * R - 74 * G + 112 * B + 128) >> 8) + 128;
+                V = ((112 * R - 94 * G - 18 * B + 128) >> 8) + 128;
+
+                yuv420sp[yIndex++] = (byte) ((Y < 0) ? 0 : ((Y > 255) ? 255 : Y));
+                if (j % 2 == 0 && index % 2 == 0) {
+                    yuv420sp[uvIndex++] = (byte) ((U < 0) ? 0 : ((U > 255) ? 255 : U));
+                    yuv420sp[uvIndex++] = (byte) ((V < 0) ? 0 : ((V > 255) ? 255 : V));
+                }
+                index++;
+            }
+        }
+    }
+
+    private long computePresentationTime(long frameIndex, int framerate) {
+        return 132 + frameIndex * 1000000 / framerate;
+    }
+
+    private MediaCodecInfo selectCodec(String mimeType) {
+        MediaCodecList list = new MediaCodecList(MediaCodecList.ALL_CODECS);
+        MediaCodecInfo[] infos = list.getCodecInfos();
+
+        for (MediaCodecInfo codecInfo :infos) {
+            if (codecInfo == null || !codecInfo.isEncoder()) {
+                continue;
+            }
+            String[] types = codecInfo.getSupportedTypes();
+            for (int j = 0; j < types.length; j++) {
+                if (types[j].equalsIgnoreCase(mimeType)) {
+                    return codecInfo;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static int selectColorFormat(MediaCodecInfo codecInfo,
+                                         String mimeType) {
+        MediaCodecInfo.CodecCapabilities capabilities = codecInfo
+                .getCapabilitiesForType(mimeType);
+        for (int i = 0; i < capabilities.colorFormats.length; i++) {
+            int colorFormat = capabilities.colorFormats[i];
+            if (isRecognizedFormat(colorFormat)) {
+                return colorFormat;
+            }
+        }
+        return 0; // not reached
+    }
+
+    private static boolean isRecognizedFormat(int colorFormat) {
+        switch (colorFormat) {
+            // these are the formats we know how to handle for
+            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
+            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420PackedPlanar:
+            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
+            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420PackedSemiPlanar:
+            case MediaCodecInfo.CodecCapabilities.COLOR_TI_FormatYUV420PackedSemiPlanar:
+                return true;
+            default:
+                return false;
+        }
+    }
 }
