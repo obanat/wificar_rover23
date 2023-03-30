@@ -6,11 +6,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import android.net.wifi.WifiConfiguration;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Parcelable;
+import android.os.PowerManager;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -47,6 +51,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     private TextView mCellgular;
     private TextView mDebugMsgText;
 
+    PowerManager.WakeLock mWakeLock;
     protected void onCreate(Bundle paramBundle) {
         super.onCreate(paramBundle);
 
@@ -74,6 +79,8 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
         //start debug msg ui
         Message msg = mHandler.obtainMessage(MESSAGE_PRINT_DEBUG_MSG);
         mHandler.sendMessageDelayed(msg,DBG_MSG_DELAY_MS);
+
+        PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
     }
 
     BroadcastReceiver mScreenBroadcastReceiver = new BroadcastReceiver() {
@@ -165,11 +172,13 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
 
     protected void onPause() {
         super.onPause();
+        keepScreenOff();
     }
 
     protected void onResume() {
         super.onResume();
-
+        keepScreenOn();
+        toggleLight(true);
         AppLog.i(TAG, "on Resume");
     }
 
@@ -387,4 +396,48 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
             }
         });
     }
+
+    private void keepScreenOn() {
+        PowerManager powerManager = null;
+        PowerManager.WakeLock wakeLock = null;
+        powerManager = (PowerManager)this.getSystemService(this.POWER_SERVICE);
+        mWakeLock = powerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK, "wificar:My Lock");
+        mWakeLock.acquire();
+    }
+
+    private void keepScreenOff() {
+        if (mWakeLock != null) {
+            mWakeLock.release();
+        }
+    }
+    CameraManager mCameraManager;
+    public void toggleLight(boolean OPEN) {
+        try {
+            //获取当前手机所有摄像头设备ID
+            mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            String[] ids = mCameraManager.getCameraIdList();
+            for (String id : ids) {
+                CameraCharacteristics c = mCameraManager.getCameraCharacteristics(id);
+                //查询该摄像头组件是否包含闪光灯
+                Boolean flashAvailable = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+
+                /*
+                 * 获取相机面对的方向
+                 * CameraCharacteristics.LENS_FACING_FRONT 前置摄像头
+                 * CameraCharacteristics.LENS_FACING_BACK 后只摄像头
+                 * CameraCharacteristics.LENS_FACING_EXTERNAL 外部的摄像头
+                 */
+                Integer lensFacing = c.get(CameraCharacteristics.LENS_FACING);
+                //if (flashAvailable != null && flashAvailable
+                //        && lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_BACK) {
+                    //打开或关闭手电筒
+                    mCameraManager.setTorchMode("0", OPEN);
+                    break;
+                //}
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 }
