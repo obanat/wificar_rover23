@@ -1,11 +1,18 @@
 package com.obana.rover;
 
+import android.Manifest;
 import android.app.Activity;
 
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.location.Criteria;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -24,15 +31,23 @@ import android.widget.CompoundButton;
 import android.graphics.drawable.Drawable;
 import android.view.View.OnClickListener;
 
+import com.amap.api.location.AMapLocation;
+import com.amap.api.location.AMapLocationClient;
+import com.amap.api.location.AMapLocationClientOption;
+import com.amap.api.maps2d.*;
+
 import java.io.*;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import com.amap.api.maps2d.model.BitmapDescriptorFactory;
+import com.amap.api.maps2d.model.MyLocationStyle;
 import com.obana.rover.utils.*;
 
-public class WificarMain extends Activity implements View.OnClickListener, View.OnTouchListener, Chronometer.OnChronometerTickListener {
+public class WificarMain extends Activity implements View.OnClickListener, View.OnTouchListener, Chronometer.OnChronometerTickListener, LocationSource {
     public static final String TAG = "Wificar_Activity";
     public static final int MESSAGE_CONNECT_TO_CAR_FAIL = 1002;
+    public static final int MESSAGE_RECONNECT_TO_CAR = 1003;
     public static final int MESSAGE_MAKE_TOAST = 6001;
 
     public static final boolean SHOW_DEBUG_MESSAGE = true;
@@ -55,13 +70,17 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
 
     private int mCameraControl = 0;
 
-    public MjpegView mJpegView;
+    private MapView mAmapView;
     public H264SurfaceView mH264View;
+
     private ImageButton mJpegButton;
     private int mJpegStart = 0;
     private Drawable buttonJpegStart;
     private Drawable buttonJpegStop;
     private Drawable buttonCameraSecond;
+
+    private AMap aMap;
+    private LocationSource.OnLocationChangedListener mListener;
 
     protected void onCreate(Bundle paramBundle) {
         super.onCreate(paramBundle);
@@ -73,7 +92,11 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         mCamControlView = findViewById(R.id.camConntrolView);
         mCamControlView.setOnWheelViewMoveListener(mCamControllerListener);
 
-        mJpegView = findViewById(R.id.jpegView);
+        mAmapView = findViewById(R.id.amap);
+
+        //create gaode map
+        mAmapView.onCreate(paramBundle);
+
         mH264View = findViewById(R.id.h264View);
         findViewById(R.id.startWifiButton).setOnClickListener(buttonWifiClickListener);
         ;
@@ -117,14 +140,19 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                 (new Thread(reLoginTask)).start();
             }
         });
+
+        if (aMap == null) {
+            aMap = mAmapView.getMap();
+            setUpMap();
+        }
     }
 
     private void refreshGLView() {
-        if (1>2/*wifiCar.isVersion20()*/) {
-            mJpegView.setVisibility(View.VISIBLE);
+        if (mJpegStart == 0) {
+            mAmapView.setVisibility(View.VISIBLE);
             mH264View.setVisibility(View.GONE);
         } else {
-            mJpegView.setVisibility(View.GONE);
+            mAmapView.setVisibility(View.GONE);
             mH264View.setVisibility(View.VISIBLE);
         }
     }
@@ -142,10 +170,6 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         return super.onKeyUp(paramInt, paramKeyEvent);
     }
 
-    protected void onPause() {
-
-        super.onPause();
-    }
 
     Runnable connectRunnable = new Runnable() {
         public void run() {
@@ -160,7 +184,10 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                 try {
                     result = WificarMain.this.wifiCar.setCmdConnect();
                 } catch (IOException e) {
-                    AppLog.e(TAG, "--->connectRunnable. e:" + e.getMessage());
+                    AppLog.e(TAG, "--->connect to car failed, reconneting after 5s ....");
+                    Message message = new Message();
+                    message.what = MESSAGE_RECONNECT_TO_CAR;
+                    WificarMain.this.handler.sendMessageDelayed(message, 5000);
                 }
                 if (result) {
                     AppLog.d(TAG, "--->wificar socket connect Succuess!");
@@ -175,11 +202,26 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
 
     protected void onResume() {
         super.onResume();
+        mAmapView.onResume();
         AppLog.i(TAG, "on Resume");
 
 
         //start wificar socket, use wifi connection
-        if (this.wifiCar.isSocketConnected() == 0) (new Thread(connectRunnable)).start();
+        if (this.wifiCar.isSocketConnected() == 0 && !handler.hasMessages(MESSAGE_RECONNECT_TO_CAR)) {
+            (new Thread(connectRunnable)).start();
+        }
+    }
+
+    protected void onPause() {
+        super.onPause();
+        mAmapView.onPause();
+        AppLog.i(TAG, "on onPause");
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        mAmapView.onSaveInstanceState(outState);
     }
 
     protected void onStop() {
@@ -243,15 +285,20 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         switch (param1Message.what) {
             case MESSAGE_CONNECT_TO_CAR_FAIL:
                 if (SHOW_DEBUG_MESSAGE)
-                    Toast.makeText(WificarMain.this, "failed to connect!", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(WificarMain.this, "failed to connect!", Toast.LENGTH_LONG).show();
                 handled = true;
                 break;
             case MESSAGE_MAKE_TOAST:
                 if (SHOW_DEBUG_MESSAGE) {
                     String msg = param1Message.getData().getString(BUNDLE_KEY_TOAST_MSG);
-                    Toast.makeText(WificarMain.this, msg, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(WificarMain.this, msg, Toast.LENGTH_LONG).show();
                 }
                 handled = true;
+                break;
+            case MESSAGE_RECONNECT_TO_CAR:
+                if (this.wifiCar.isSocketConnected() == 0 && !handler.hasMessages(MESSAGE_RECONNECT_TO_CAR)) {
+                    (new Thread(connectRunnable)).start();
+                }
                 break;
             default:
                 return false;
@@ -296,7 +343,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
             AppLog.i(TAG, "videoEnable:" + mJpegStart);
             try {
                 switch (mJpegStart) {
-                    case 0 :
+                    case 0:
                         WificarMain.this.wifiCar.enableVideo(false, true);
                         break;
                     case 1:
@@ -596,7 +643,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
 
                 if (wifiCar.isVersion20()) {
                     mJpegStart = 0;
-                    mJpegView.stopPlayback();
+                    //mJpegView.stopPlayback();
                     mJpegButton.setImageDrawable(buttonJpegStop);
                     mJpegButton.invalidateDrawable(buttonJpegStop);
                 } else {
@@ -605,11 +652,11 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                     mJpegButton.setImageDrawable(buttonJpegStop);
                     mJpegButton.invalidateDrawable(buttonJpegStop);
                 }
-            } else if (mJpegStart == 0){
+            } else if (mJpegStart == 0) {
 
                 if (wifiCar.isVersion20()) {
                     mJpegStart = 1;
-                    mJpegView.startPlayback();
+                    //mJpegView.startPlayback();
                     mJpegButton.setImageDrawable(buttonJpegStart);
                     mJpegButton.invalidateDrawable(buttonJpegStart);
                 } else {
@@ -622,7 +669,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
             } else if (mJpegStart == 1) {
                 if (wifiCar.isVersion20()) {
                     mJpegStart = 0;
-                    mJpegView.stopPlayback();
+                    //mJpegView.stopPlayback();
                     mJpegButton.setImageDrawable(buttonJpegStop);
                     mJpegButton.invalidateDrawable(buttonJpegStop);
                 } else {
@@ -632,6 +679,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
                     mJpegButton.invalidateDrawable(buttonCameraSecond);
                 }
             }
+            refreshGLView();
             (new Thread(videoEnableThread)).start();
         }
     };
@@ -642,4 +690,75 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
             startActivity(wifiSettingsIntent);
         }
     };
+
+    private void setUpMap() {
+       
+        MyLocationStyle myLocationStyle = new MyLocationStyle();
+        myLocationStyle.myLocationIcon(BitmapDescriptorFactory
+                .fromResource(R.drawable.car_marker));
+        myLocationStyle.strokeColor(Color.BLACK);
+        myLocationStyle.radiusFillColor(Color.argb(100, 0, 0, 180));
+        // myLocationStyle.anchor(int,int)
+        myLocationStyle.strokeWidth(1.0f);
+        aMap.setMyLocationStyle(myLocationStyle);
+        aMap.setLocationSource(this);
+        aMap.getUiSettings().setMyLocationButtonEnabled(true);
+        aMap.setMyLocationEnabled(true);
+
+        LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        MyLocationListener listener = new MyLocationListener();
+
+        Criteria criteria = new Criteria();
+        criteria.setAccuracy(Criteria.ACCURACY_MEDIUM);
+
+        String proveder = lm.getBestProvider(criteria, true);
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        } else {
+            lm.requestLocationUpdates(proveder, 0, 0, listener);
+            AppLog.i(TAG, "requestLocationUpdates");
+        }
+    }
+
+    @Override
+    public void activate(LocationSource.OnLocationChangedListener listener) {
+        mListener = listener;
+    }
+
+    @Override
+    public void deactivate() {
+        mListener = null;
+    }
+
+
+    class MyLocationListener implements LocationListener {
+        /**
+         */
+        public void onLocationChanged(Location location) {
+            if (location == null || mListener == null) return;
+
+            AMapLocation amapLocation = new AMapLocation(location);
+            mListener.onLocationChanged(amapLocation);
+
+            wifiCar.sendLocation(location.getLongitude(),location.getLatitude());
+            AppLog.i(TAG,"get one location:" + location);
+        }
+
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+        }
+
+        public void onProviderEnabled(String provider) {
+        }
+
+        public void onProviderDisabled(String provider) {
+        }
+    }
+
+    public void onCarLocationChanged(double lon, double lay) {
+        AMapLocation amapLocation = new AMapLocation("gps");
+        amapLocation.setLongitude(lon);
+        amapLocation.setLatitude(lay);
+        mListener.onLocationChanged(amapLocation);
+    }
 }
