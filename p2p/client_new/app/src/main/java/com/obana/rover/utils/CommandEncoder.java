@@ -21,6 +21,7 @@ public class CommandEncoder
     public static final int AUDIO_START_RESP = 9;
     public static final int DECODER_CONTROL_REQ = 14;
     public static final int CAMERA_CONTROL_REQ_V3 = 14;
+    public static final int LOCATION_RESP = 113;
     public static final int DEVICE_CONTROL_REQ = 250;
     public static final int FETCH_BATTERY_POWER_REQ = 251;
     public static final int FETCH_BATTERY_POWER_RESP = 252;
@@ -197,6 +198,31 @@ public class CommandEncoder
         } while(true);
     }
 
+    public static double byteArrayToDouble(byte abyte0[])//lenth should be 8
+    {
+        long value = 0;
+
+        if (abyte0 ==null || abyte0.length < 8) {
+            return 0;
+        }
+        for (int i = 0; i < 8; i++) {
+            value |= ((long) (abyte0[i] & 0xff)) << (8 * i);
+        }
+
+        return Double.longBitsToDouble(value);
+    }
+
+    public static byte[] doubleTobyteArray(double db)//lenth should be 8
+    {
+        //IEEE 754
+        Long value = Double.doubleToRawLongBits(db);
+        byte[] b = new byte[8];
+        for(int i = 0 ; i<8;i++){
+            b[i] = (byte)((value>>8*i)&0xff);
+        }
+        return b;
+    }
+
     public static byte[] cmdAudioEnd()
         throws IOException
     {
@@ -334,7 +360,13 @@ public class CommandEncoder
         return (new Protocol("MO_O".getBytes(), 4, 1, bytebuffer.array())).output();
     }
 
+    public static byte[] cmdLocationInfo(double lon, double lay) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(doubleTobyteArray(lon));
+        out.write(doubleTobyteArray(lay));
 
+        return (new Protocol("MO_O".getBytes(), LOCATION_RESP, 16, out.toByteArray())).output();
+    }
     public static int getPrefixCount(byte abyte0[], int i)
     {
         int j = 0;
@@ -521,10 +553,22 @@ public class CommandEncoder
             return 1;
         case 18: 
             return 1;
+
+        case 113://location info
+            parseLocationInfo(wificar, protocol.getContent(),len);
+            return 1;
+
         }
         //return bytearraybuffer;
     }
 
+    public static void parseLocationInfo(WifiCar wificar, byte abyte0[], int i){
+        if (i == 16) {
+            double lon = byteArrayToDouble(abyte0);
+            double lay = byteArrayToDouble(arrayCopy(abyte0,8,8));
+            wificar.onCarLocationChanged(lon, lay);
+        }
+    }
     public static byte[] parseFetchBatteryPowerResp(WifiCar wificar, byte abyte0[], int i)
         throws IOException
     {
