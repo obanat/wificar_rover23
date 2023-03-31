@@ -13,6 +13,8 @@ import android.net.NetworkCapabilities;
 import android.net.Network;
 
 import com.obana.rover.utils.*;
+import org.json.JSONObject;
+
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -136,7 +138,7 @@ public class WifiCar
     public String realHostIp()  {
         StringBuffer sb = new StringBuffer();
         String hostUrl = "http://i4free.top:38086/wificar/getClientIp";
-        AppLog.d("network", hostUrl);
+        AppLog.d(TAG, hostUrl);
         try {
             URL updateURL = new URL(hostUrl);
             URLConnection conn = updateURL.openConnection();
@@ -152,6 +154,23 @@ public class WifiCar
 
         }
 
+        if(sb.length() > 50) {
+            JSONObject jsonObject= null;
+            try {
+                jsonObject = new JSONObject(sb.toString());
+                long time = jsonObject.optLong("time");
+                String ipAddr = jsonObject.optString("ipaddr");
+                long now = System.currentTimeMillis();
+                if (now - time > 0 && now-time < 60*1000/*1 min*/){
+                    sb = new StringBuffer();
+                    sb.append(ipAddr);
+                    WificarMain main = (WificarMain)mainUI;
+                    main.sendToastMessage("proxy onsite!");
+                }
+            }catch (Exception ee){
+
+            }
+        }
         this.targetHost = sb.toString();
         return targetHost;
 
@@ -177,7 +196,7 @@ public class WifiCar
             //network.bindSocket(cloudSocket);
             InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, CLOUD_HOST_PORT);
             cmdSocket = SocketFactory.getDefault().createSocket();
-            cmdSocket.connect(inetSocketAddress, 5000);
+            cmdSocket.connect(inetSocketAddress, 3000);
         }
         AppLog.i(TAG, "wificar connect successful! addr:" + CLOUD_HOST_NAME);
         if(!cmdSocket.isConnected()){
@@ -352,8 +371,8 @@ public class WifiCar
         try {
           if (cmdSocket == null)
             return 0; 
-          boolean bool = cmdSocket.isConnected();
-            return 1;
+
+          return cmdSocket.isConnected()?1:0;
         } catch (Exception exception) {
           exception.printStackTrace();
         } 
@@ -475,7 +494,7 @@ public class WifiCar
         AppLog.i(TAG, "--->send jpeg data to main activity.... len:" + jpgData.length);
 
         WificarMain main = (WificarMain)mainUI;
-        main.mJpegView.setCameraBytes(jpgData);
+        //main.mJpegView.setCameraBytes(jpgData);
     }
 
     public boolean isVersion20() {
@@ -496,5 +515,28 @@ public class WifiCar
 
         WificarMain main = (WificarMain)mainUI;
         main.mH264View.decodeOneFrame(buf, len);
+    }
+
+    private double cachedLon = 0;
+    private double cachedLay = 0;
+    public void sendLocation(double lon, double lay) {
+        byte abyte0[];
+
+        if (cachedLon == lon && cachedLay == lay){
+            return;
+        }
+        cachedLon = lon;cachedLay = lay;
+        try {
+            abyte0 = CommandEncoder.cmdLocationInfo(lon,lay);
+            dataOutputStream.write(abyte0);
+            dataOutputStream.flush();
+        } catch(Exception ioexception) {
+            AppLog.i(TAG, "can not move camera!");
+        }
+    }
+
+    public void onCarLocationChanged(double lon, double lay) {
+        WificarMain main = (WificarMain)mainUI;
+        main.onCarLocationChanged(lon, lay);
     }
 }
