@@ -72,6 +72,9 @@
 		android:name="com.obana.rover.MyApplication"
 		android:allowBackup="true"
 		>
+		<meta-data
+			android:name="com.amap.api.v2.apikey"
+			android:value="600e50998c6c2ce2b9cade69f541f0b9" />
 		<receiver
 	            android:name=".BootCompleteReceiver"
 	            android:enabled="true"
@@ -92,21 +95,5 @@
 				<category android:name="android.intent.category.LAUNCHER" />
 			</intent-filter>
 		</activity>
-		
-		<receiver
-			android:name="com.obana.rover.PhoneStateReceiver"
-			android:exported="false"
-			>
-			<intent-filter
-				android:priority="1000"
-				>
-				<action
-					android:name="android.intent.action.PHONE_STATE"
-					>
-				</action>
-				<category android:name="android.intent.category.DEFAULT" />
-
-			</intent-filter>
-		</receiver>
 	</application>
 </manifest>
