@@ -20,6 +20,5 @@ public class BootCompleteReceiver extends BroadcastReceiver {
         if(Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction()) ){
 
         }
-        
     }
 }

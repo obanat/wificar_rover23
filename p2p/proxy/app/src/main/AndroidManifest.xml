@@ -67,6 +67,9 @@
 		android:icon="@drawable/proxy_icon"
 		android:name="com.obana.carproxy.MyApplication"
 		android:allowBackup="true">
+		<meta-data
+			android:name="com.amap.api.v2.apikey"
+			android:value="600e50998c6c2ce2b9cade69f541f0b9" />
 		<receiver
 			android:name=".BootCompleteReceiver"
 			android:enabled="true"

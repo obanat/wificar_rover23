@@ -1,8 +1,14 @@
 package com.obana.carproxy;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.location.Criteria;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -13,6 +19,7 @@ import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.os.Bundle;
 
 import com.obana.carproxy.utils.*;
 import java.io.*;
@@ -121,6 +128,8 @@ public class CarProxy
 
         mCarState = CAR_STATE_INIT;
         mCloudState = CLOUD_STATE_INIT;
+
+        initLocationProvider();
         AppLog.i(TAG, "new CarProxy created successfully!");
     }
     private android.graphics.BitmapFactory.Options mBitmapOpt;
@@ -128,7 +137,7 @@ public class CarProxy
     int mHeight;
     private static final String MIME_TYPE = "video/avc"; // H.264 Advanced Video Coding
     private static final int BIT_RATE = 240000;
-    private static final int I_FRAME_INTERVAL = 2;
+    private static final int I_FRAME_INTERVAL = 20;
 
 
     void initMediaCodec() {
@@ -381,6 +390,11 @@ public class CarProxy
                         jpegData = YUVQueue.poll();
                     }
 
+                    if (mediaCodec == null) {
+                        mH264EncodeRunning = false;
+                        AppLog.e(TAG, "media codec is null, exit encode thread");
+                        break;
+                    }
                     if (jpegData == null) continue;
                     Bitmap bitmap = BitmapFactory.decodeByteArray(jpegData, 0, jpegData.length, mBitmapOpt);
 
@@ -760,6 +774,7 @@ public class CarProxy
         }
 
         initMediaCodec();
+
         if (thread_media_codec == null) {
             thread_media_codec = new Thread(runnable_media_codec);
             thread_media_codec.setName("media_codec Thread");
@@ -903,6 +918,9 @@ public class CarProxy
 
         sb.append("CMD:[UP]").append(mCmdUpLinkCount).append("   [DOWN]").append(mCmdDownLinkCount)
                 .append("   MEDIA:").append(mMediaCount).append("\r\n");
+        sb.append("\r\n");
+
+        sb.append("Location:").append(mLocationCount).append("\r\n");
         sb.append("\r\n");
         return sb.toString();
     }
@@ -1118,6 +1136,67 @@ public class CarProxy
                 return true;
             default:
                 return false;
+        }
+    }
+
+    class MyLocationListener implements LocationListener {
+        /**
+         */
+        public void onLocationChanged(Location location) {
+            if (location == null) return;
+
+            AppLog.i(TAG,"get one location:" + location);
+            sendLocation(location.getLongitude(),location.getLatitude());
+
+        }
+
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+        }
+
+        public void onProviderEnabled(String provider) {
+        }
+
+        public void onProviderDisabled(String provider) {
+        }
+    }
+
+    private void initLocationProvider() {
+
+        LocationManager lm = (LocationManager) mainUI.getSystemService(mainUI.LOCATION_SERVICE);
+        MyLocationListener listener = new MyLocationListener();
+
+        Criteria criteria = new Criteria();
+        criteria.setAccuracy(Criteria.ACCURACY_MEDIUM);
+
+        String proveder = lm.getBestProvider(criteria, true);
+        if (mainUI.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && mainUI.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        } else {
+            lm.requestLocationUpdates(proveder, 0, 0, listener);
+            AppLog.i(TAG, "requestLocationUpdates");
+        }
+    }
+
+    private double cachedLon = 0;
+    private double cachedLay = 0;
+    private int mLocationCount = 0;
+    public void sendLocation(double lon, double lay) {
+        byte abyte0[];
+
+        if (cachedLon == lon && cachedLay == lay && mCarState != CAR_STATE_RUNNING){
+            return;
+        }
+        cachedLon = lon;cachedLay = lay;sms,mn
+        try {
+            abyte0 = CommandEncoder.cmdLocationInfo(lon,lay);
+            if (cloudCmdOutputStream != null) {
+                cloudCmdOutputStream.write(abyte0);
+                cloudCmdOutputStream.flush();
+                mLocationCount++;
+            }
+        } catch(Exception ioexception) {
+            AppLog.e(TAG, "can not send location data!");
         }
     }
 }

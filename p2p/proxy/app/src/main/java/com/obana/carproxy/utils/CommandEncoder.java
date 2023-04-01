@@ -20,6 +20,7 @@ public class CommandEncoder
     public static final int AUDIO_START_REQ = 8;
     public static final int AUDIO_START_RESP = 9;
     public static final int DECODER_CONTROL_REQ = 14;
+    public static final int LOCATION_RESP = 113;
     public static final int DEVICE_CONTROL_REQ = 250;
     public static final int FETCH_BATTERY_POWER_REQ = 251;
     public static final int FETCH_BATTERY_POWER_RESP = 252;
@@ -299,6 +300,31 @@ public class CommandEncoder
         return ret.output();
     }
 
+    public static double byteArrayToDouble(byte abyte0[])//lenth should be 8
+    {
+        long value = 0;
+
+        if (abyte0 ==null || abyte0.length < 8) {
+            return 0;
+        }
+        for (int i = 0; i < 8; i++) {
+            value |= ((long) (abyte0[i] & 0xff)) << (8 * i);
+        }
+
+        return Double.longBitsToDouble(value);
+    }
+
+    public static byte[] doubleTobyteArray(double db)//lenth should be 8
+    {
+        //IEEE 754
+        Long value = Double.doubleToRawLongBits(db);
+        byte[] b = new byte[8];
+        for(int i = 0 ; i<8;i++){
+            b[i] = (byte)((value>>8*i)&0xff);
+        }
+        return b;
+    }
+
     public static byte[] cmdVideoEnd()
         throws IOException
     {
@@ -347,6 +373,14 @@ public class CommandEncoder
         bytearrayoutputstream.write(talkdata.getData());
         return new Protocol("MO_V".getBytes(), 3, bytearrayoutputstream.size(), bytearrayoutputstream.toByteArray());
     }*/
+
+    public static byte[] cmdLocationInfo(double lon, double lay) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(doubleTobyteArray(lon));
+        out.write(doubleTobyteArray(lay));
+
+        return (new Protocol("MO_O".getBytes(), LOCATION_RESP, 16, out.toByteArray())).output();
+    }
 
     public static int getPrefixCount(byte abyte0[], int i)
     {

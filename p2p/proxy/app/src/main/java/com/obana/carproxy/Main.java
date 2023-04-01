@@ -413,24 +413,24 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     CameraManager mCameraManager;
     public void toggleLight(boolean OPEN) {
         try {
-            //获取当前手机所有摄像头设备ID
+            //get all camera id
             mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
             String[] ids = mCameraManager.getCameraIdList();
             for (String id : ids) {
                 CameraCharacteristics c = mCameraManager.getCameraCharacteristics(id);
-                //查询该摄像头组件是否包含闪光灯
+                //get CameraCharacteristics
                 Boolean flashAvailable = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
 
                 /*
-                 * 获取相机面对的方向
-                 * CameraCharacteristics.LENS_FACING_FRONT 前置摄像头
-                 * CameraCharacteristics.LENS_FACING_BACK 后只摄像头
-                 * CameraCharacteristics.LENS_FACING_EXTERNAL 外部的摄像头
+                 * get camer facing
+                 * CameraCharacteristics.LENS_FACING_FRONT
+                 * CameraCharacteristics.LENS_FACING_BACK
+                 * CameraCharacteristics.LENS_FACING_EXTERNAL
                  */
                 Integer lensFacing = c.get(CameraCharacteristics.LENS_FACING);
                 //if (flashAvailable != null && flashAvailable
                 //        && lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_BACK) {
-                    //打开或关闭手电筒
+                    //
                     mCameraManager.setTorchMode("0", OPEN);
                     break;
                 //}
@@ -439,5 +439,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
             e.printStackTrace();
         }
     }
-
+    public void onCarLocationChanged(double lon, double lay) {
+        //mainUI.onCarLocationChanged(mLocationCount);
+    }
 }
