@@ -97,10 +97,6 @@ public class WifiCar
 
         mediaReceiverOutputStream = null;
         mediaReceiverInputStream = null;
-     
-
-
-     
         instance = this;
 
         mainUI = activity;
@@ -515,24 +511,6 @@ public class WifiCar
 
         WificarMain main = (WificarMain)mainUI;
         main.mH264View.decodeOneFrame(buf, len);
-    }
-
-    private double cachedLon = 0;
-    private double cachedLay = 0;
-    public void sendLocation(double lon, double lay) {
-        byte abyte0[];
-
-        if (cachedLon == lon && cachedLay == lay){
-            return;
-        }
-        cachedLon = lon;cachedLay = lay;
-        try {
-            abyte0 = CommandEncoder.cmdLocationInfo(lon,lay);
-            dataOutputStream.write(abyte0);
-            dataOutputStream.flush();
-        } catch(Exception ioexception) {
-            AppLog.i(TAG, "can not move camera!");
-        }
     }
 
     public void onCarLocationChanged(double lon, double lay) {

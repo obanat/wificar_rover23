@@ -20,5 +20,6 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation files('src\\main\\libs\\AMap2DMap_6.0.0_AMapSearch_9.4.5_AMapLocation_6.2.0_20221026.jar')
     //classpath "com.android.tools.build:gradle:3.4.2"
 }

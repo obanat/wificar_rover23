@@ -1,21 +1,17 @@
 package com.obana.rover;
 
-import android.Manifest;
 import android.app.Activity;
 
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.location.Criteria;
-import android.location.Location;
 import android.location.LocationListener;
-import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.PowerManager;
 import android.util.Log;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -81,6 +77,7 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
 
     private AMap aMap;
     private LocationSource.OnLocationChangedListener mListener;
+    private PowerManager.WakeLock mWakeLock;
 
     protected void onCreate(Bundle paramBundle) {
         super.onCreate(paramBundle);
@@ -145,6 +142,12 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
             aMap = mAmapView.getMap();
             setUpMap();
         }
+
+        PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
+        if (powerManager != null) {
+            mWakeLock = powerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK, "wificar:WakeLock");
+        }
+
     }
 
     private void refreshGLView() {
@@ -205,6 +208,9 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         mAmapView.onResume();
         AppLog.i(TAG, "on Resume");
 
+        if (mWakeLock != null) {
+            mWakeLock.acquire();
+        }
 
         //start wificar socket, use wifi connection
         if (this.wifiCar.isSocketConnected() == 0 && !handler.hasMessages(MESSAGE_RECONNECT_TO_CAR)) {
@@ -215,6 +221,10 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     protected void onPause() {
         super.onPause();
         mAmapView.onPause();
+
+        if (mWakeLock != null) {
+            mWakeLock.release();
+        }
         AppLog.i(TAG, "on onPause");
     }
 
@@ -704,21 +714,6 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
         aMap.setLocationSource(this);
         aMap.getUiSettings().setMyLocationButtonEnabled(true);
         aMap.setMyLocationEnabled(true);
-
-        LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
-        MyLocationListener listener = new MyLocationListener();
-
-        Criteria criteria = new Criteria();
-        criteria.setAccuracy(Criteria.ACCURACY_MEDIUM);
-
-        String proveder = lm.getBestProvider(criteria, true);
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return;
-        } else {
-            lm.requestLocationUpdates(proveder, 0, 0, listener);
-            AppLog.i(TAG, "requestLocationUpdates");
-        }
     }
 
     @Override
@@ -729,30 +724,6 @@ public class WificarMain extends Activity implements View.OnClickListener, View.
     @Override
     public void deactivate() {
         mListener = null;
-    }
-
-
-    class MyLocationListener implements LocationListener {
-        /**
-         */
-        public void onLocationChanged(Location location) {
-            if (location == null || mListener == null) return;
-
-            AMapLocation amapLocation = new AMapLocation(location);
-            mListener.onLocationChanged(amapLocation);
-
-            wifiCar.sendLocation(location.getLongitude(),location.getLatitude());
-            AppLog.i(TAG,"get one location:" + location);
-        }
-
-        public void onStatusChanged(String provider, int status, Bundle extras) {
-        }
-
-        public void onProviderEnabled(String provider) {
-        }
-
-        public void onProviderDisabled(String provider) {
-        }
     }
 
     public void onCarLocationChanged(double lon, double lay) {

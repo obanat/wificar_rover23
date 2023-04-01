@@ -554,7 +554,7 @@ public class CommandEncoder
         case 18: 
             return 1;
 
-        case 113://location info
+        case LOCATION_RESP://location info
             parseLocationInfo(wificar, protocol.getContent(),len);
             return 1;
 
@@ -569,6 +569,7 @@ public class CommandEncoder
             wificar.onCarLocationChanged(lon, lay);
         }
     }
+
     public static byte[] parseFetchBatteryPowerResp(WifiCar wificar, byte abyte0[], int i)
         throws IOException
     {

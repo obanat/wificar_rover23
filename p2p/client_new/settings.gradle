@@ -1,2 +1,2 @@
 include ':app'
-rootProject.name='client-ORG-Gradle'
+rootProject.name='client-new'
