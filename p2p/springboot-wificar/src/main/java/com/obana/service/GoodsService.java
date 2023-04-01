@@ -9,5 +9,5 @@ public interface GoodsService {
 
     JSONObject regClient(String mac, String time, String ipaddr);
 
-    String getClientIp(String mac);
+    JSONObject getClientIp(String mac);
 }

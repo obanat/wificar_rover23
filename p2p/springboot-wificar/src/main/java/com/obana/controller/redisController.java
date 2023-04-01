@@ -26,7 +26,7 @@ public class redisController {
     }
 
     @RequestMapping(value = "/getClientIp", method = RequestMethod.GET)
-    public String getClientIp() {
+    public JSONObject getClientIp() {
         String mac = "";
         return goodsService.getClientIp(mac);
     }

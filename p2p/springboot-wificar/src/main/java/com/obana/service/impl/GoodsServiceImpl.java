@@ -52,9 +52,9 @@ public class GoodsServiceImpl implements GoodsService {
     }
 
     @Override
-    public String getClientIp(String mac){
-        String result = "error";
-
+    public JSONObject getClientIp(String mac){
+        //String result = "error";
+        JSONObject result = new JSONObject();
         if (mac == null || mac.length() == 0) {
             mac = "112233";//this is default mac
         }
@@ -62,10 +62,15 @@ public class GoodsServiceImpl implements GoodsService {
         for (int i = 0; i<infoList.size();i++) {
             carInfo info = infoList.get(i);
             if (info != null && mac.equals(info.getMac())) {
-                return  info.getIpaddr();
+                result.put("code", "0");
+                result.put("msg", "注册成功！");
+                result.put("ipaddr", info.getIpaddr());
+                result.put("time", info.getTime());
+                return result ;
             }
         }
-
+        result.put("code", "500");
+        result.put("msg", "request error");
         return result;
     }
 }
