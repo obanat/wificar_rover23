@@ -1,7 +1,10 @@
 package com.obana.carproxy;
 
+import static android.content.Context.MODE_PRIVATE;
+
 import android.Manifest;
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -48,6 +51,8 @@ public class CarProxy
 
     //this sock for uplink & downlink command
     private static final String CAR_HOST_ADDR = "192.168.1.100";
+    private static final String UPLOAD_IP_URL = "http://obana.f3322.org:38086/wificar/regClient";
+
     private static final int CAR_PORT = 80;
 
     private static final int USE_H264 = 1;
@@ -130,14 +135,22 @@ public class CarProxy
         mCloudState = CLOUD_STATE_INIT;
 
         initLocationProvider();
+
+        HttpServer hs = new HttpServer(38000,mainUI);
+        try{
+            hs.start();
+        }catch(Exception e){
+            AppLog.e(TAG,"start http server error:"+e.getMessage());
+        }
+
         AppLog.i(TAG, "new CarProxy created successfully!");
     }
     private android.graphics.BitmapFactory.Options mBitmapOpt;
     int mWidth;//mjpg frame width
     int mHeight;
     private static final String MIME_TYPE = "video/avc"; // H.264 Advanced Video Coding
-    private static final int BIT_RATE = 240000;
-    private static final int I_FRAME_INTERVAL = 20;
+    private static final int BIT_RATE = 140000;
+    private static final int I_FRAME_INTERVAL = 50;
 
 
     void initMediaCodec() {
@@ -1017,16 +1030,18 @@ public class CarProxy
         }
     }
 
+    private static final String SP_KEY_IP ="ipaddr";
+    private static final String SP_KEY_MAC ="mac";
     public void uploadIp(Network network) {
         AppLog.i(TAG, "upload ip to cloud ...");
         try {
             String data = "mac=112233&time=" + System.currentTimeMillis()
                     + "&ipaddr=" + mLocalIpV6Address;
+            SharedPreferences sp = mainUI.getSharedPreferences("wificar_para", MODE_PRIVATE);
+            String value = sp.getString(SP_KEY_IP,UPLOAD_IP_URL);
+            String mac = sp.getString(SP_KEY_MAC,"11");
 
-            InetAddress addr = network.getByName("i4free.top");
-            String sAddr = addr.toString();
-            sAddr = sAddr.substring(sAddr.indexOf("/")+1);
-            URL url =new URL("http://i4free.top:38086/wificar/regClient");
+            URL url =new URL(value);
             HttpURLConnection connection = (HttpURLConnection)network.openConnection(url);
             connection.setDoInput(true);
             connection.setDoOutput(true);
@@ -1040,16 +1055,57 @@ public class CarProxy
             connection.getOutputStream().close();
 
             if (connection.getResponseCode() == 200) {
-                mExternalIpV6Address = "OK------->";
+                mExternalIpV6Address = "upload OK------->";
                 InputStream input = connection.getInputStream();
                 BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(input));
                 String result = bufferedReader.readLine();
                 input.close();
-                AppLog.i(TAG, "upload local IpV6 to i4free, success!");
+                AppLog.i(TAG, "upload local IpV6 to redis cloud, success!");
+                uploadIpWithSSID(network);
+            } else {
+                mExternalIpV6Address = "upload failed------->\r\n" + mExternalIpV6Address;
+                AppLog.e(TAG, "upload local IpV6 to redis cloud, failed resp:" + connection.getResponseCode());
             }
             mainUI.updateUI(mainUI.VIEW_ID_MOBILE_NETWORK, false);
         } catch (IOException iOException) {
             AppLog.e(TAG, "uploadIp, failed! e:" + iOException.getMessage());
+        }
+    }
+
+    public void uploadIpWithSSID(Network network) {
+        String mac = "";
+        if (mWifiSSID != null && mWifiSSID.startsWith("Rover_")){
+            mac = mWifiSSID.replace("Rover_","");
+        }
+
+        if (mac.length() <= 8) return;
+
+        AppLog.i(TAG, "upload ip with ssid to cloud ...ssid:" + mac);
+        try {
+            String data = "mac=" + mac + "&time=" + System.currentTimeMillis()
+                    + "&ipaddr=" + mLocalIpV6Address;
+
+            URL url =new URL(UPLOAD_IP_URL);
+            HttpURLConnection connection = (HttpURLConnection)network.openConnection(url);
+            connection.setDoInput(true);
+            connection.setDoOutput(true);
+            connection.setRequestMethod("POST");
+
+            connection.setUseCaches(false);
+            connection.connect();
+
+            connection.getOutputStream().write(data.getBytes());
+            connection.getOutputStream().flush();
+            connection.getOutputStream().close();
+
+            if (connection.getResponseCode() == 200) {
+                AppLog.i(TAG, "upload local IpV6 with ssid to redis cloud, success!");
+            } else {
+                AppLog.e(TAG, "upload local IpV6 with ssid  to redis cloud, failed resp:" + connection.getResponseCode());
+            }
+
+        } catch (IOException iOException) {
+            AppLog.e(TAG, "uploadIpWithSSID, failed! e:" + iOException.getMessage());
         }
     }
 
@@ -1139,6 +1195,7 @@ public class CarProxy
         }
     }
 
+    private int mLoactionCountRaw = 0;
     class MyLocationListener implements LocationListener {
         /**
          */
@@ -1146,6 +1203,7 @@ public class CarProxy
             if (location == null) return;
 
             AppLog.i(TAG,"get one location:" + location);
+            mLoactionCountRaw++;
             sendLocation(location.getLongitude(),location.getLatitude());
 
         }
@@ -1166,7 +1224,7 @@ public class CarProxy
         MyLocationListener listener = new MyLocationListener();
 
         Criteria criteria = new Criteria();
-        criteria.setAccuracy(Criteria.ACCURACY_MEDIUM);
+        criteria.setAccuracy(Criteria.ACCURACY_LOW);
 
         String proveder = lm.getBestProvider(criteria, true);
         if (mainUI.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
@@ -1174,7 +1232,7 @@ public class CarProxy
             return;
         } else {
             lm.requestLocationUpdates(proveder, 0, 0, listener);
-            AppLog.i(TAG, "requestLocationUpdates");
+            AppLog.i(TAG, "requestLocationUpdates success!");
         }
     }
 
@@ -1187,7 +1245,7 @@ public class CarProxy
         if (cachedLon == lon && cachedLay == lay && mCarState != CAR_STATE_RUNNING){
             return;
         }
-        cachedLon = lon;cachedLay = lay;sms,mn
+        cachedLon = lon;cachedLay = lay;
         try {
             abyte0 = CommandEncoder.cmdLocationInfo(lon,lay);
             if (cloudCmdOutputStream != null) {
@@ -1198,5 +1256,10 @@ public class CarProxy
         } catch(Exception ioexception) {
             AppLog.e(TAG, "can not send location data!");
         }
+    }
+
+    private String mWifiSSID = "";
+    public void setWifiSSID(String ssid) {
+        mWifiSSID = ssid;
     }
 }

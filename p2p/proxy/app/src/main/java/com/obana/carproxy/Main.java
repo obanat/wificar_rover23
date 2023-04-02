@@ -178,7 +178,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     protected void onResume() {
         super.onResume();
         keepScreenOn();
-        toggleLight(true);
+        //toggleLight(true);
         AppLog.i(TAG, "on Resume");
     }
 
@@ -200,6 +200,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
 
                 //force update UI
                 mCarProxy.setCarReady(true);
+                mCarProxy.setWifiSSID(ssid);
                 ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
                 mCarProxy.makeWifiReady(null,connectivityManager);
                 //requestWIFINetwork();

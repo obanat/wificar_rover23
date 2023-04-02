@@ -19,6 +19,6 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    //implementation group: 'org.apache.httpcomponents', name: 'httpclient', version: "4.3.3"
+    implementation 'org.nanohttpd:nanohttpd:2.3.1'
     //classpath "com.android.tools.build:gradle:3.4.2"
 }
