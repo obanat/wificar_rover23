@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:layout_width="wrap_content" android:layout_height="wrap_content">
-    <RelativeLayout android:layout_width="wrap_content" android:layout_height="wrap_content">
-        <ImageView android:orientation="vertical" android:id="@+id/imageView1" android:background="@drawable/disgsensor" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-        <Button android:textSize="18dp" android:id="@+id/okbutton" android:layout_width="80dp" android:layout_height="50dp" android:layout_marginRight="40dp" android:layout_marginBottom="20dp" android:text="OK" android:layout_alignRight="@+id/imageView1" android:layout_alignBottom="@+id/imageView1"/>
-    </RelativeLayout>
-</LinearLayout>

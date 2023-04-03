@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="match_parent">
-    <RelativeLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@+id/linearlayout_button" android:visibility="visible" android:layout_width="match_parent" android:layout_height="40dp" android:layout_alignParentTop="true">
-        <TextView android:textSize="15dp" android:textStyle="bold" android:textColor="#ff004144" android:id="@+id/photo_counts" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text=" X of X " android:layout_centerHorizontal="true" android:layout_centerVertical="true"/>
-        <Button android:gravity="center" android:id="@+id/delete_button" android:layout_width="80dp" android:layout_height="40dp" android:layout_marginRight="10dp" android:text="Delete" android:layout_toLeftOf="@+id/share_button" android:layout_alignParentTop="true"/>
-        <Button android:gravity="center" android:id="@+id/share_button" android:layout_width="80dp" android:layout_height="40dp" android:text="Share" android:layout_alignParentRight="true"/>
-    </RelativeLayout>
-</LinearLayout>

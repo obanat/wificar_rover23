@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-    <intent android:targetPackage="com.wificar" android:action="android.intent.action.MAIN" android:targetClass="com.wificar.SettongActivity1"/>
-</PreferenceScreen>
