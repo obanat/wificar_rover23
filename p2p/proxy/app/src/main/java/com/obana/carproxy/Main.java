@@ -1,11 +1,13 @@
 package com.obana.carproxy;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 
+import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
@@ -38,12 +40,18 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     private static final boolean SHOW_DEBUG_MESSAGE = false;
     private static final String BUNDLE_KEY_TOAST_MSG = "toast_msg";
     private static final int DBG_MSG_DELAY_MS = 1500;
+
+    private static final int SELF_CHECK_MSG_DELAY_MS = 6000;
+
     private static final int MESSAGE_CONNECT_TO_CAR_FAIL = 0x1001;
     private static final int MESSAGE_PRINT_DEBUG_MSG = 0x1002;
     private static final int MESSAGE_CONNECT_CLIENT = 0x1003;
     private static final int MESSAGE_MAKE_TOAST = 0x1004;
     private static final int MESSAGE_REFRESH_WIFI = 0x1005;
     private static final int MESSAGE_REFRESH_CLOUD = 0x1006;
+
+    private static final int MESSAGE_SELF_CHECK_OK = 0x1007;
+    private static final int MESSAGE_WIFI_DIRECT = 0x1008;
     private CarProxy mCarProxy = null;
     private Handler mHandler = null;
 
@@ -81,6 +89,9 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
         mHandler.sendMessageDelayed(msg,DBG_MSG_DELAY_MS);
 
         PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
+
+        msg = mHandler.obtainMessage(MESSAGE_SELF_CHECK_OK);
+        mHandler.sendMessageDelayed(msg, SELF_CHECK_MSG_DELAY_MS);
     }
 
     BroadcastReceiver mScreenBroadcastReceiver = new BroadcastReceiver() {
@@ -96,6 +107,9 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
 
                 //start cloud socket, use cell connection
                 new Thread(cloudRunnable).start();
+
+                Message newMsg = mHandler.obtainMessage(MESSAGE_SELF_CHECK_OK);
+                mHandler.sendMessageDelayed(newMsg, SELF_CHECK_MSG_DELAY_MS);
             }
         }
     };
@@ -196,7 +210,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
             DhcpInfo dhcpInfo = manager.getDhcpInfo();
             String dhcpAddr = int2ip(dhcpInfo.gateway);
             AppLog.d(TAG, "---->wifi info, dhcp ip addr:" + dhcpAddr);
-            if ((ssid != null && ssid.contains("Rover")) || mCarProxy.matchWifiCarAddr(dhcpAddr)) {
+            if (CommandEncoder.matchSSid(ssid) || mCarProxy.matchWifiCarAddr(dhcpAddr)) {
 
                 //force update UI
                 mCarProxy.setCarReady(true);
@@ -211,12 +225,7 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
                 mCarProxy.setCarReady(false);
                 updateUI(VIEW_ID_CAR_WIFI, false);
 
-                WifiConfiguration tempConfig = findSpecifiedSsid(manager, "Rover_");
-                if (tempConfig != null) {
-                    AppLog.i(TAG, "---->wifi not connected, enable it ....");
-                    boolean enabled = manager.enableNetwork(tempConfig.networkId, true);
-                    AppLog.i(TAG, "enable wifi status enable=" + enabled);
-                }
+                connectToWifi();
             }
         }
     };
@@ -237,10 +246,15 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     WifiConfiguration findSpecifiedSsid(WifiManager wifiManager, String ssid) {
         if (wifiManager != null) {
 
+            if (!(checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    && checkSelfPermission(android.Manifest.permission.ACCESS_WIFI_STATE) == PackageManager.PERMISSION_GRANTED)) {
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_WIFI_STATE}, 9999);
+            }
+
             List<WifiConfiguration> existingConfigs = wifiManager.getConfiguredNetworks();
-            AppLog.i(TAG, "---> 1111");
+            AppLog.i(TAG, "---> existingConfigs:" + (existingConfigs!=null?existingConfigs.size():0));
             for (WifiConfiguration existingConfig : existingConfigs) {
-                AppLog.i(TAG, "---> 22222 " + existingConfig.SSID);
+                AppLog.i(TAG, "---> SSID: " + existingConfig.SSID);
                 if (existingConfig.SSID.contains(ssid)) {
                     return existingConfig;
                 }
@@ -305,10 +319,8 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
     public boolean onTouch(View paramView, MotionEvent paramMotionEvent) {
         AppLog.d(TAG, "on onTouch");
 
-
         return true;
     }
-
 
     private String int2ip(int ipInt) {
         StringBuilder sb = new StringBuilder();
@@ -352,6 +364,13 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
             case MESSAGE_REFRESH_CLOUD:
                 refreshUI(VIEW_ID_MOBILE_NETWORK, false,0);
                 break;
+
+            case MESSAGE_SELF_CHECK_OK:
+                //showWarning(mCarProxy.mCarState, mCarProxy.mCloudState);
+                break;
+            case MESSAGE_WIFI_DIRECT:
+                mCarProxy.connectToWifiDirect();
+                break;
             default:
                 return false;
         }
@@ -367,8 +386,12 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
         mHandler.sendMessage(msg);
     }
 
-    public void sendThreadUpdateMessage(boolean isCmd, int value) {
+    public void sendWifiDirectMessage() {
 
+        if (mHandler.hasMessages(MESSAGE_WIFI_DIRECT)) return;
+
+        Message msg = mHandler.obtainMessage(MESSAGE_WIFI_DIRECT);
+        mHandler.sendMessage(msg);
     }
 
     private Thread connectClientTask = new Thread() {
@@ -440,7 +463,34 @@ public class Main extends Activity implements View.OnClickListener, View.OnTouch
             e.printStackTrace();
         }
     }
+
     public void onCarLocationChanged(double lon, double lay) {
         //mainUI.onCarLocationChanged(mLocationCount);
+    }
+
+    private void showWarning(int carStatus, int cloudStatus) {
+
+    }
+
+    private static final String SSID = "TP-LINK_5F1A";
+    private void connectToWifi() {
+        WifiConfiguration config = new WifiConfiguration();
+        config.allowedAuthAlgorithms.clear();
+        config.allowedGroupCiphers.clear();
+        config.allowedKeyManagement.clear();
+        config.allowedPairwiseCiphers.clear();
+        config.allowedProtocols.clear();
+        config.SSID = "\"" + SSID + "\"";
+        // nopass
+        config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+
+        WifiManager manager = (WifiManager)getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        int netID = manager.addNetwork(config);
+        if (netID == -1) {
+            AppLog.e(TAG,"connectToWifi error, netid:" + netID);
+        } else {
+            AppLog.i(TAG,"connectToWifi success, netid:" + netID);
+            manager.enableNetwork(netID, true);
+        }
     }
 }
