@@ -527,4 +527,22 @@ public class CommandEncoder
         System.arraycopy(src2, start2, ret, len1, len2);
         return ret;
     }
+
+    private static final String PREFIX_SSID_ROVER = "Rover_";
+    private static final String PREFIX_SSID_AC13 = "AC13_";
+    public static boolean matchSSid(String ssid) {
+        if (ssid.startsWith(PREFIX_SSID_ROVER) || ssid.startsWith(PREFIX_SSID_AC13)) {
+            return  true;
+        }
+
+        return false;
+    }
+
+    public static String getMac(String ssid) {
+        if (ssid == null || ssid.length() <= 8) return null;
+
+        if (ssid.indexOf("_") <= 0) return null;
+
+        return ssid.substring(ssid.indexOf("_") + 1);
+    }
 }
