@@ -4,6 +4,8 @@ import static android.content.Context.MODE_PRIVATE;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -22,6 +24,12 @@ import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.net.wifi.WpsInfo;
+import android.net.wifi.p2p.WifiP2pConfig;
+import android.net.wifi.p2p.WifiP2pDevice;
+import android.net.wifi.p2p.WifiP2pDeviceList;
+import android.net.wifi.p2p.WifiP2pInfo;
+import android.net.wifi.p2p.WifiP2pManager;
 import android.os.Bundle;
 
 import com.obana.carproxy.utils.*;
@@ -35,8 +43,11 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 
@@ -143,6 +154,7 @@ public class CarProxy
             AppLog.e(TAG,"start http server error:"+e.getMessage());
         }
 
+        initWifiDirect();
         AppLog.i(TAG, "new CarProxy created successfully!");
     }
     private android.graphics.BitmapFactory.Options mBitmapOpt;
@@ -1072,13 +1084,16 @@ public class CarProxy
         }
     }
 
+
     public void uploadIpWithSSID(Network network) {
         String mac = "";
-        if (mWifiSSID != null && mWifiSSID.startsWith("Rover_")){
-            mac = mWifiSSID.replace("Rover_","");
+
+        //this assume wifi ssid start with "AC13_" or "Rover_"
+        if (mWifiSSID != null && CommandEncoder.matchSSid(mWifiSSID)){
+            mac = CommandEncoder.getMac(mWifiSSID);
         }
 
-        if (mac.length() <= 8) return;
+        if (mac == null || mac.length() <= 8) return;
 
         AppLog.i(TAG, "upload ip with ssid to cloud ...ssid:" + mac);
         try {
@@ -1261,5 +1276,119 @@ public class CarProxy
     private String mWifiSSID = "";
     public void setWifiSSID(String ssid) {
         mWifiSSID = ssid;
+    }
+
+    private WifiP2pManager mManager;
+    private WifiP2pManager.Channel mChannel;
+    private WiFiDirectBroadcastReceiver mReceiver;
+    private List<WifiP2pDevice> mPeers = new ArrayList<>();
+    private List<String> mDeviceNames = new ArrayList<>();
+    private boolean mWifiDirectConnected = false;
+    private void initWifiDirect( ) {
+        mManager = (WifiP2pManager) mainUI.getSystemService(Context.WIFI_P2P_SERVICE);
+        mChannel = mManager.initialize(mainUI, mainUI.getMainLooper(), null);
+        AppLog.v(TAG,"3.启动广播监听器");
+        IntentFilter intentFilter = new IntentFilter();
+        // Indicates a change in the Wi-Fi P2P status.
+        intentFilter.addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
+        // Indicates a change in the list of available peers.
+        intentFilter.addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
+        // Indicates the state of Wi-Fi P2P connectivity has changed.
+        intentFilter.addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION);
+        // Indicates this device's details have changed.
+        intentFilter.addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION);
+        mReceiver = new WiFiDirectBroadcastReceiver(mManager, mChannel, this,peerListListener,connectionInfoListener);
+        mainUI.registerReceiver(mReceiver, intentFilter);
+        mManager.discoverPeers(mChannel, new WifiP2pManager.ActionListener() {
+
+            @Override
+            public void onSuccess() {
+                AppLog.v(TAG,"4.启动搜索对等设备 p2p搜索是否启动成功 : true");
+                //搜索启动 成功
+            }
+
+            @Override
+            public void onFailure(int reasonCode) {
+                AppLog.v(TAG,"4.启动搜索对等设备 p2p搜索是否启动成功 : false");
+                //搜索启动 失败
+            }
+        });
+
+    }
+
+
+    private WifiP2pManager.ConnectionInfoListener connectionInfoListener = new WifiP2pManager.ConnectionInfoListener() {
+        @Override
+        public void onConnectionInfoAvailable(WifiP2pInfo wifiP2pInfo) {
+            // InetAddress from WifiP2pInfo struct.
+            String groupOwnerAddress = wifiP2pInfo.groupOwnerAddress.getHostAddress();
+            //7.连接成功!!
+            AppLog.v(TAG,"7.连接成功!! addr:" + groupOwnerAddress);
+
+            if (wifiP2pInfo.groupFormed && wifiP2pInfo.isGroupOwner) {
+                //群主
+                AppLog.v(TAG,"Group ---- > 群主?");
+
+            } else if (wifiP2pInfo.groupFormed) {
+                //组员
+                AppLog.v(TAG,"Group ---- > 组员?");
+                mWifiDirectConnected = groupOwnerAddress.equals("192.168.49.1"/*CAR_HOST_ADDR*/);
+            }
+        }
+    };
+
+    private String DIRECT_DEVICE_NAME = "Rover-6677";
+    private int mLastPeerListSize = 0;
+    private WifiP2pManager.PeerListListener peerListListener = new WifiP2pManager.PeerListListener() {
+        @Override
+        public void onPeersAvailable(WifiP2pDeviceList peerList) {
+
+            Collection<WifiP2pDevice> refreshedPeers = peerList.getDeviceList();
+
+            if (refreshedPeers.size() == mLastPeerListSize) return;
+
+            mLastPeerListSize = refreshedPeers.size();
+            mPeers.clear();
+            for (WifiP2pDevice peer : refreshedPeers){
+                if (peer.deviceName.equals(DIRECT_DEVICE_NAME)) {
+                    mPeers.add(peer);
+                    mainUI.sendWifiDirectMessage();
+                    break;
+                }
+            }
+
+            //mWiFiPeerListAdapter.notifyDataSetChanged();
+        }
+    };
+
+    public void connectToWifiDirect(){
+
+        if (mPeers.size() <= 0) return;
+
+        if (mWifiDirectConnected) return;
+
+        WifiP2pDevice device = mPeers.get(0);
+
+        WifiP2pConfig config = new WifiP2pConfig();
+        config.deviceAddress = device.deviceAddress;
+        config.wps.setup = WpsInfo.PBC;
+
+        mManager.connect(mChannel, config, new WifiP2pManager.ActionListener() {
+
+            @Override
+            public void onSuccess() {
+                // WiFiDirectBroadcastReceiver notifies us. Ignore for now.
+                AppLog.v(TAG,"6.点击，连接设备  连接是否启动成功 : true");
+            }
+
+            @Override
+            public void onFailure(int reason) {
+                AppLog.v(TAG,"6.点击，连接设备  连接是否启动成功 : false");
+            }
+        });
+    }
+
+    public void setWifiDirectState(boolean connected) {
+        mWifiDirectConnected = connected;
     }
 }
