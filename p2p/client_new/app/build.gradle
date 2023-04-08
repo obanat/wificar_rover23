@@ -16,10 +16,16 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    packagingOptions {
+        exclude 'META-INF/DEPENDENCIES'
+    }
+
+    useLibrary  'org.apache.http.legacy'
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation files('src\\main\\libs\\AMap2DMap_6.0.0_AMapSearch_9.4.5_AMapLocation_6.2.0_20221026.jar')
+    implementation group: 'org.apache.httpcomponents', name: 'httpclient', version: "4.3.3"
     //classpath "com.android.tools.build:gradle:3.4.2"
 }

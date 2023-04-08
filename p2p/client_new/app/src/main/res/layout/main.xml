@@ -22,6 +22,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="500dp"/>
 
+            <com.obana.rover.MjpegView
+                android:id="@+id/jpegView"
+                android:layout_width="match_parent"
+                android:layout_height="500dp" />
+
             <com.obana.rover.H264SurfaceView
                 android:id="@+id/h264View"
                 android:layout_width="match_parent"
@@ -74,6 +79,20 @@
                     android:background="#00000000"
                     android:textOff="2"
                     android:textOn="3" />
+
+                <TextView
+                    android:id="@+id/textView_V2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="模式:" />
+
+                <Switch
+                    android:id="@+id/modeSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="#00000000"
+                    android:textOff="L"
+                    android:textOn="R" />
 
             </LinearLayout>
 

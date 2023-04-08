@@ -1,47 +1,30 @@
 package com.obana.rover;
-
 import android.app.Activity;
-import android.content.Context;
-
-import android.net.Uri;
-import android.os.Handler;
-
-import android.net.ConnectivityManager;
-import android.net.NetworkRequest;
-import android.net.NetworkRequest.*;
-import android.net.NetworkCapabilities;
 import android.net.Network;
-
 import com.obana.rover.utils.*;
 import org.json.JSONObject;
-
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.InetAddress;
 import java.net.URL;
 import java.net.URLConnection;
-import java.nio.ByteBuffer;
-import java.text.ParseException;
 import java.util.Timer;
 import java.util.TimerTask;
 import javax.net.SocketFactory;
-import java.net.Inet6Address;
-import java.net.ServerSocket;
 
-
-// Referenced classes of package com.wificar.component:
-//            AudioComponent, VideoComponent, AudioData, VideoData, 
-//            CommandEncoder, TalkData
 
 public class WifiCar
 {
-    private static final String TAG = "WifiCar_T";
-    private static final int CAR_MODE_LOCAL = 0x10;
-    private static final int CAR_MODE_CLOUD = 0x11;
+    private static final String TAG = "WifiCar";
+    public static final int CAR_MODE_LOCAL = 0x10;
+    public static final int CAR_MODE_CLOUD = 0x11;
+    public static final int CAR_MODE_P2P = 0x12;
 
     private static final String LOCAL_HOST_ADDR = "192.168.1.100";
-    private static final int LOCAL_HOST_PORT = 28000;
+    private static final int LOCAL_HOST_PORT = 80;
+
+    private static final int P2P_HOST_PORT = 28000;
+    private static final String P2P_HOST_URL = "http://obana.f3322.org:38086/wificar/getClientIp";
 
     private static final String CLOUD_HOST_NAME = "cloud.obana.top";
     private static final int CLOUD_HOST_PORT = 19090;
@@ -52,7 +35,7 @@ public class WifiCar
     private static final int CMD_BUF_SIZE = 1024;
     private static final int MEDIA_BUF_SIZE = (64*1024);
 
-    private int carStateMode;//0-local;1-cloud
+    private int carStateMode;
     private int carVersion;//version of wificar;2.0;3.0
     DataInputStream dataInputStream;
     DataOutputStream dataOutputStream;
@@ -60,28 +43,29 @@ public class WifiCar
 
     private WifiCar instance;
     Timer keepAliveTimer;
-    private long lLastCmdTimeStamp;
-  
-    private long lastMoveCurrentTime;
+
     private Activity mainUI;
     DataInputStream mediaReceiverInputStream;
     DataOutputStream mediaReceiverOutputStream;
     Socket cmdSocket;
-    Socket receiverMediaSocket;
-    Thread mediaRevThread;
+    Socket mediaSocket;
+
     boolean bwificarConnected = false;
     boolean bmedia_Connected = false;
     byte[] cmdBuffer = new byte[CMD_BUF_SIZE];
     byte[] mediaBuffer = new byte[MEDIA_BUF_SIZE];
 
-    //private VideoData vData;
+    private String targetHost;
+    private int targetPort;
+
+    Thread cmdThread;
+    Thread mediaThread;
+    boolean cmdThreadBool = false;
+    boolean mediaThreadBool = false;
 
     public WifiCar(Activity activity)
     {
-
-
-     
-        carStateMode = CAR_MODE_LOCAL;
+        carStateMode = CAR_MODE_P2P;
         keepAliveTimer = new Timer("keep alive");
         instance = null;
         bwificarConnected = false;
@@ -89,11 +73,10 @@ public class WifiCar
         mainUI = null;
     
         cmdSocket = null;
-        receiverMediaSocket = null;
 
         dataOutputStream = null;
         dataInputStream = null;
-        receiverMediaSocket = null;
+        mediaSocket = null;
 
         mediaReceiverOutputStream = null;
         mediaReceiverInputStream = null;
@@ -101,6 +84,14 @@ public class WifiCar
 
         mainUI = activity;
         carVersion = CAR_VERSION_30;//3.0 by default
+
+        HttpServer hs = new HttpServer();
+        try{
+            hs.execute(38000);
+        }catch(Exception e){
+            AppLog.e(TAG,"start http server error:"+e.getMessage());
+        }
+
         AppLog.d(TAG, "new WifiCar created successfully!");
     }
 
@@ -130,14 +121,16 @@ public class WifiCar
         }
     }
 
-    private String targetHost;
+
     public String realHostIp()  {
         StringBuffer sb = new StringBuffer();
-        String hostUrl = "http://i4free.top:38086/wificar/getClientIp";
+        String hostUrl = P2P_HOST_URL;
         AppLog.d(TAG, hostUrl);
+
+        if (cachedNetwork == null ) return "error";
         try {
             URL updateURL = new URL(hostUrl);
-            URLConnection conn = updateURL.openConnection();
+            URLConnection conn = cachedNetwork.openConnection(updateURL);
             BufferedReader rd = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF8"));
             while (true) {
                 String s = rd.readLine();
@@ -162,6 +155,8 @@ public class WifiCar
                     sb.append(ipAddr);
                     WificarMain main = (WificarMain)mainUI;
                     main.sendToastMessage("proxy onsite!");
+                } else {
+                    AppLog.e(TAG, "get car ip from redis error, time not match");
                 }
             }catch (Exception ee){
 
@@ -169,36 +164,86 @@ public class WifiCar
         }
         this.targetHost = sb.toString();
         return targetHost;
-
     }
 
-    public boolean setCmdConnect() throws IOException {
+    //use for reConnect, such as mode switch
+    public boolean reConnect(Network network) throws IOException {
+        bwificarConnected = false;
+        releaseSocket();
+        return setCmdConnect(network);
+    }
+
+    private void releaseSocket() {
+        try {
+            if (cmdSocket != null) {
+                AppLog.i(TAG, "close previous car cmd socket...");
+                cmdSocket.close();
+            }
+
+            if (mediaSocket != null) {
+                AppLog.i(TAG, "close previous car media socket...");
+                mediaSocket.close();
+            }
+        } catch (Exception e){
+            AppLog.e(TAG, "clean up socket met error.");
+        }
+
+        try {
+            cmdThreadBool = false;
+            AppLog.i(TAG, "stop cmd & media thread...");
+            if (cmdThread != null) {
+                cmdThread.interrupt();
+                cmdThread = null;
+            }
+            mediaThreadBool = false;
+            if (mediaThread != null) {
+                mediaThread.interrupt();
+                mediaThread = null;
+            }
+            dataOutputStream = null;
+            dataInputStream = null;
+
+            mediaReceiverOutputStream = null;
+            mediaReceiverInputStream = null;
+
+        } catch (Exception e){
+            AppLog.e(TAG, "clean up resource car cmd met error3.");
+        }
+    }
+
+    Network cachedNetwork = null;
+    public boolean setCmdConnect(Network network) throws IOException {
         if (bwificarConnected) {
             AppLog.i(TAG, "--->alreay connect, just return");
             return true;
         }
 
-
-        if (carStateMode == CAR_MODE_LOCAL) {
-            createCommandSocket(realHostIp(), LOCAL_HOST_PORT);
-        } else {    
-            ConnectivityManager connectivityManager = (ConnectivityManager)(mainUI.getSystemService(Context.CONNECTIVITY_SERVICE));
-            Network network = connectivityManager.getActiveNetwork();
-            if (network ==null) return false;
-
-            InetAddress addr = network.getByName(CLOUD_HOST_NAME);
-            AppLog.i(TAG, "--->get cloud dns addr:" + addr.getHostAddress());
-
-            //network.bindSocket(cloudSocket);
-            InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, CLOUD_HOST_PORT);
-            cmdSocket = SocketFactory.getDefault().createSocket();
-            cmdSocket.connect(inetSocketAddress, 3000);
+        if (network == null) {
+            AppLog.e(TAG, "--->network null, just return");
+            return true;
         }
-        AppLog.i(TAG, "wificar connect successful! addr:" + CLOUD_HOST_NAME);
+        cachedNetwork = network;
+
+        if (carStateMode == CAR_MODE_P2P) {
+            targetHost = realHostIp();
+            targetPort = P2P_HOST_PORT;
+        } else {
+            //local mode
+            targetHost = LOCAL_HOST_ADDR;
+            targetPort = LOCAL_HOST_PORT;
+        }
+
+        InetSocketAddress inetSocketAddress = new InetSocketAddress(targetHost, targetPort);;
+        AppLog.i(TAG, "wificar connecting ... addr:" + inetSocketAddress);
+        cmdSocket = SocketFactory.getDefault().createSocket();
+        network.bindSocket(cmdSocket);
+        cmdSocket.connect(inetSocketAddress, 3000);
+
         if(!cmdSocket.isConnected()){
-            AppLog.i(TAG, "--->socket init failed!");
+            AppLog.i(TAG, "--->socket init failed! addr:" + inetSocketAddress);
             return false;
         }
+        AppLog.i(TAG, "wificar connect successful!");
 
         dataOutputStream = new DataOutputStream(cmdSocket.getOutputStream());
         dataInputStream = new DataInputStream(cmdSocket.getInputStream());
@@ -211,7 +256,8 @@ public class WifiCar
         dataOutputStream.write(abyte0);
         dataOutputStream.flush();
 
-        Thread rev = new Thread(new Runnable() {
+        cmdThreadBool = true;
+        cmdThread = new Thread(new Runnable() {
 
             public void run()//this is main receive loop
             {
@@ -243,24 +289,18 @@ public class WifiCar
                         AppLog.i(TAG, "main parseCommand io exception!, just throw it!");
                         bwificarConnected = false;
                     }
-                } while(true);
+                } while(cmdThreadBool);
 
             }
         });
-        rev.setName("Command Thread");
-        rev.start();
+        cmdThread.setName("Command Thread");
+        cmdThread.start();
 
         bwificarConnected = true;
         return bwificarConnected;
     }
     
-    private Socket createCommandSocket(String paramString, int paramInt) throws IOException {
-      cmdSocket = SocketFactory.getDefault().createSocket();
-      InetSocketAddress inetSocketAddress = new InetSocketAddress(paramString, paramInt);
-      cmdSocket.connect(inetSocketAddress, 5000);
-      //this.bSocketState = true;
-      return cmdSocket;
-    }
+
     public String getKey()
     {
         if (isVersion20()) {
@@ -325,8 +365,8 @@ public class WifiCar
         if (byUser && bmedia_Connected) {
             try {
                 bmedia_Connected = false;
-                receiverMediaSocket.close();
-                if (mediaRevThread!=null) mediaRevThread.stop();
+                mediaSocket.close();
+                if (mediaThread!=null) mediaThread.interrupt();
             } catch (IOException e) {
                 AppLog.e(TAG, "stop thread & close media socket error!");
             }
@@ -409,32 +449,29 @@ public class WifiCar
     }
 
     public void connectMediaReceiver(int i)throws IOException{
-        if (carStateMode == CAR_MODE_CLOUD/*cloud mode use combined socket*/) {
-            //byte abyte0[] = CommandEncoder.cmdMediaLoginReq(i);//this will be send by proxy, no need to send by client
-            //dataOutputStream.write(abyte0);
-            //dataOutputStream.flush();
-            //return;
-        }
         if (bmedia_Connected) {
             AppLog.i(TAG, "--->alreay connect media socket, just return");
             return;
         }
-        AppLog.i(TAG, "--->media socket creating .....");
-        Socket socket = createMediaReceiverSocket(targetHost, LOCAL_HOST_PORT + 1);
+        AppLog.i(TAG, "--->media socket creating .....host:" + targetHost + " port:" + targetPort);
 
-        if(!socket.isConnected()){
+        //use cached host & port
+       createMediaReceiverSocket(targetHost, targetPort);
+
+        if(!mediaSocket.isConnected()){
             AppLog.i(TAG, "--->media socket connect failed!");
             throw new IOException();
         }
 
-        mediaReceiverOutputStream = new DataOutputStream(socket.getOutputStream());
-        mediaReceiverInputStream = new DataInputStream(socket.getInputStream());
+        mediaReceiverOutputStream = new DataOutputStream(mediaSocket.getOutputStream());
+        mediaReceiverInputStream = new DataInputStream(mediaSocket.getInputStream());
 
         byte abyte0[] = CommandEncoder.cmdMediaLoginReq(i);
         mediaReceiverOutputStream.write(abyte0);
         mediaReceiverOutputStream.flush();
-        
-        Thread mediaRevThread = new Thread(new Runnable() {
+
+        mediaThreadBool = true;
+        mediaThread = new Thread(new Runnable() {
 
             public void run()//this is media receive loop
             {
@@ -467,30 +504,32 @@ public class WifiCar
                         AppLog.i(TAG, "media parseCommand io exception!, just throw it!");
                         //throw new IOException();
                     }
-                } while(true);
+                } while(mediaThreadBool);
 
             }
         });
-        mediaRevThread.setName("Media Thread");
-        mediaRevThread.start();
+        mediaThread.setName("Media Thread");
+        mediaThread.start();
         bmedia_Connected = true;
     }
 
-    private Socket createMediaReceiverSocket(String host, int port)throws IOException {
-        receiverMediaSocket = SocketFactory.getDefault().createSocket();
+    private void createMediaReceiverSocket(String host, int port)throws IOException {
+        mediaSocket = SocketFactory.getDefault().createSocket();
         InetSocketAddress addr = new InetSocketAddress(host, port);
-        receiverMediaSocket.setReceiveBufferSize(MEDIA_BUF_SIZE);
+        mediaSocket.setReceiveBufferSize(MEDIA_BUF_SIZE);
+
+        if (cachedNetwork != null) cachedNetwork.bindSocket(mediaSocket);
+
         AppLog.i(TAG, "--->media socket connecting .....");
-        receiverMediaSocket.connect(addr, 5000);
+        mediaSocket.connect(addr, 5000);
 
         AppLog.i(TAG, "--->media socket connected .....");
-        return receiverMediaSocket;
     }
     public void refreshView(byte[] jpgData) {
         AppLog.i(TAG, "--->send jpeg data to main activity.... len:" + jpgData.length);
 
         WificarMain main = (WificarMain)mainUI;
-        //main.mJpegView.setCameraBytes(jpgData);
+        main.mJpegView.setCameraBytes(jpgData);
     }
 
     public boolean isVersion20() {
@@ -516,5 +555,16 @@ public class WifiCar
     public void onCarLocationChanged(double lon, double lay) {
         WificarMain main = (WificarMain)mainUI;
         main.onCarLocationChanged(lon, lay);
+    }
+
+    private void createHttpServer() {
+        HttpServer hs = new HttpServer();
+    }
+
+    public void setMode(int mode ){
+        carStateMode = mode;
+    }
+    public int getMode( ){
+        return carStateMode;
     }
 }
